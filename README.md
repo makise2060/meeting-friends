@@ -41,7 +41,19 @@ npm start
 npm run dist
 ```
 
-产物为 `dist/好友见面-1.0.0.exe`（portable 便携版）。
+产物为 `dist/friends-meet-<version>-win-x64-portable.exe`（portable 便携版，版本取自 `package.json`）。界面显示名仍为「好友见面」。
+
+## 版本与发布
+
+- 采用 SemVer，版本唯一来源是 `package.json`；修改版本时需同步 `package-lock.json` 的 `version`。
+- 发布流程：
+  1. 修改两处版本号，提交并推送 `main`；
+  2. 在 Actions → Release 手动运行一次，从 Artifacts 下载产物验证；
+  3. `git tag -a vX.Y.Z -m "好友见面 vX.Y.Z"` 并推送 tag；
+  4. workflow 自动构建并创建 GitHub Release，资产为 `friends-meet-X.Y.Z-win-x64-portable.exe`。
+- 手动运行只上传 Artifacts（保留 14 天），不创建 Release；推送 `v*` tag 才会发布。
+- 当前仅支持 Windows x64，产物未签名，首次运行需在 SmartScreen 提示里选择「更多信息 → 仍要运行」。
+- 私有仓库的 Windows runner 按 2 倍时长计费，避免频繁触发。
 
 ## 网络与端口
 
