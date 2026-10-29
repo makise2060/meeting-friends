@@ -184,6 +184,7 @@ function hitTest(x, y) {
 function resetInteraction() {
   dragging = null;
   document.body.classList.remove('dragging');
+  api.setDragging(false);
   for (const pet of pets.values()) clearEmotes(pet);
   if (interactive) {
     interactive = false;
@@ -221,6 +222,7 @@ stage.addEventListener('mousedown', (e) => {
   document.body.classList.add('dragging');
   interactive = true;
   api.setInteractive(true);
+  api.setDragging(true);
 });
 
 window.addEventListener('mousemove', (e) => {
@@ -249,6 +251,7 @@ window.addEventListener('mouseup', () => {
   api.movePet(dragging.id, cx / W, cy / H);
   dragging = null;
   document.body.classList.remove('dragging');
+  api.setDragging(false);
 });
 
 window.addEventListener('resize', () => {

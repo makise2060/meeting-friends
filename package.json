@@ -1,12 +1,15 @@
 {
   "name": "friends-meet",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "description": "局域网桌面宠物聊天",
+  "homepage": "https://github.com/makise2060/meeting-friends",
+  "desktopName": "friends-meet.desktop",
   "main": "src/main/index.js",
   "scripts": {
     "start": "electron .",
-    "dist": "electron-builder --win portable"
+    "dist": "electron-builder --win portable",
+    "dist:linux": "electron-builder --linux deb --x64"
   },
   "author": "friends",
   "license": "MIT",
@@ -41,6 +44,50 @@
     },
     "portable": {
       "artifactName": "friends-meet-${version}-win-x64-portable.exe"
+    },
+    "linux": {
+      "target": [
+        {
+          "target": "deb",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "friends-meet-${version}-linux-amd64.${ext}",
+      "executableName": "friends-meet",
+      "icon": "build/icon.png",
+      "maintainer": "makise2060 <makise2060@gmail.com>",
+      "synopsis": "局域网桌面宠物聊天",
+      "description": "局域网桌面宠物聊天：同一局域网开房间，朋友的像素桌宠跑到你的桌面上，配一条随处可呼出的聊天条。",
+      "category": "Network;InstantMessaging;",
+      "syncDesktopName": true,
+      "desktop": {
+        "entry": {
+          "Name": "好友见面",
+          "Comment": "局域网桌面宠物聊天",
+          "Keywords": "chat;lan;pet;friends;"
+        }
+      }
+    },
+    "deb": {
+      "packageName": "friends-meet",
+      "packageCategory": "net",
+      "priority": "optional",
+      "recommends": [],
+      "depends": [
+        "libgtk-3-0 | libgtk-3-0t64",
+        "libnotify4 | libnotify4t64",
+        "libnss3",
+        "libxss1 | libxss1t64",
+        "libxtst6 | libxtst6t64",
+        "xdg-utils",
+        "libatspi2.0-0 | libatspi2.0-0t64",
+        "libuuid1",
+        "libsecret-1-0",
+        "libasound2 | libasound2t64",
+        "libgbm1"
+      ]
     }
   }
 }

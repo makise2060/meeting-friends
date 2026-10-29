@@ -4,6 +4,18 @@
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-29 · 双栖
+
+### 新增
+
+- 新增 Ubuntu/Debian `.deb` 安装包（amd64），可从应用菜单「好友见面」启动
+- Linux X11 会话下补充桌宠悬停/拖动兜底，并对齐 app_id 与 `.desktop`
+- Release Notes 增加 Windows / Ubuntu 系统下载表、直链与 SHA-256 校验
+
+### 优化
+
+- CI 改为 Windows + Ubuntu 双平台构建，Release 默认创建 Draft，人工确认后发布
+
 ## [0.2.0] - 2026-10-29 · 同乐
 
 > 内置表情素材版权归 Recreate Games / Source Technology 所有，仅限个人、非商业使用。
@@ -41,6 +53,7 @@
 - 打包产物统一命名为 `friends-meet-<version>-win-x64-portable.exe`
 - 建立 SemVer 版本体系与 GitHub Actions 自动发布流程
 
-[Unreleased]: https://github.com/makise2060/meeting-friends/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/makise2060/meeting-friends/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/makise2060/meeting-friends/releases/tag/v0.3.0
 [0.2.0]: https://github.com/makise2060/meeting-friends/releases/tag/v0.2.0
 [0.1.0]: https://github.com/makise2060/meeting-friends/releases/tag/v0.1.0

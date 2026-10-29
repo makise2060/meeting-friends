@@ -8,6 +8,8 @@ const { HostRoom, ClientRoom, localIPs, MAX_PLAYERS, BASE_PORT } = require('./ne
 const { scanRooms, startAnnounce } = require('./discovery');
 
 const CHAT = { w: 480, h: 64, mini: 56, panelExtra: 248 };
+const PET = { SIZE: 96, HIT: 6, TOP: 64, NAME: 26 };
+const IS_LINUX = process.platform === 'linux';
 const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
 
 let setupWin = null;
@@ -19,6 +21,10 @@ let announce = null;
 let quitting = false;
 let chatCollapsed = false;
 let chatPanelOpen = false;
+let overlayInteractive = false;
+let overlayDragging = false;
+let overlayPollTimer = null;
+let overlayPollUnavailable = false;
 let config = {};
 
 const CONFIG_PATH = () => path.join(app.getPath('userData'), 'config.json');
@@ -95,13 +101,16 @@ function createOverlayWindow() {
     webPreferences: webPreferences('overlay.js')
   });
   overlayWin.setAlwaysOnTop(true, 'screen-saver');
-  overlayWin.setIgnoreMouseEvents(true, { forward: true });
+  overlayWin.setIgnoreMouseEvents(true, IS_LINUX ? undefined : { forward: true });
   overlayWin.loadFile(path.join(__dirname, '..', 'renderer', 'overlay', 'index.html'));
   overlayWin.webContents.on('did-finish-load', () => {
-    overlayWin.setIgnoreMouseEvents(true, { forward: true });
+    setOverlayInteractive(false, true);
     sendState();
   });
-  overlayWin.on('closed', () => { overlayWin = null; });
+  overlayWin.on('closed', () => {
+    overlayWin = null;
+    stopOverlayPolling();
+  });
 }
 
 function createChatWindow() {
@@ -173,18 +182,71 @@ function wireRoom(r) {
   });
 }
 
+function setOverlayInteractive(on, force = false) {
+  const next = Boolean(on);
+  if (!force && next === overlayInteractive) return;
+  overlayInteractive = next;
+  if (overlayWin && !overlayWin.isDestroyed()) {
+    overlayWin.setIgnoreMouseEvents(!next, IS_LINUX ? undefined : { forward: true });
+  }
+}
+
+function pollOverlayHit() {
+  if (overlayDragging) return;
+  if (!overlayWin || overlayWin.isDestroyed() || !overlayWin.isVisible() || !room) {
+    setOverlayInteractive(false);
+    return;
+  }
+  let point;
+  try {
+    point = screen.getCursorScreenPoint();
+  } catch {
+    return;
+  }
+  const b = overlayWin.getBounds();
+  const half = PET.SIZE / 2;
+  const radius = half + PET.HIT;
+  const x = point.x - b.x;
+  const y = point.y - b.y;
+  const hit = room.players.some((p) => {
+    const cx = clamp(p.x * b.width, half, b.width - half);
+    const cy = clamp(p.y * b.height, PET.TOP + half, b.height - PET.NAME - half);
+    return Math.abs(x - cx) <= radius && Math.abs(y - cy) <= radius;
+  });
+  setOverlayInteractive(hit);
+}
+
+function startOverlayPolling() {
+  if (!IS_LINUX || overlayPollTimer || overlayPollUnavailable) return;
+  if (process.env.XDG_SESSION_TYPE === 'wayland' && app.commandLine.getSwitchValue('ozone-platform') !== 'x11') {
+    overlayPollUnavailable = true;
+    console.warn('[overlay] Wayland 会话下禁用鼠标悬停兜底，建议使用 X11 会话');
+    return;
+  }
+  overlayPollTimer = setInterval(pollOverlayHit, 50);
+  overlayPollTimer.unref?.();
+}
+
+function stopOverlayPolling() {
+  clearInterval(overlayPollTimer);
+  overlayPollTimer = null;
+  overlayDragging = false;
+}
+
 function showOverlay() {
   if (!overlayWin || overlayWin.isDestroyed()) return;
   overlayWin.showInactive();
-  overlayWin.setIgnoreMouseEvents(true, { forward: true });
+  setOverlayInteractive(false, true);
   overlayWin.webContents.send('relayout');
   overlayWin.webContents.send('overlay:reset');
+  startOverlayPolling();
 }
 
 function hideOverlay() {
   if (!overlayWin || overlayWin.isDestroyed()) return;
+  stopOverlayPolling();
   overlayWin.webContents.send('overlay:reset');
-  overlayWin.setIgnoreMouseEvents(true, { forward: true });
+  setOverlayInteractive(false, true);
   overlayWin.hide();
 }
 
@@ -433,9 +495,13 @@ function registerIpc() {
   });
 
   ipcMain.handle('overlay:interactive', (_e, on) => {
-    if (overlayWin && !overlayWin.isDestroyed()) {
-      overlayWin.setIgnoreMouseEvents(!on, { forward: true });
-    }
+    setOverlayInteractive(on);
+    return true;
+  });
+
+  ipcMain.handle('overlay:dragging', (_e, on) => {
+    overlayDragging = Boolean(on);
+    if (overlayDragging) setOverlayInteractive(true, true);
     return true;
   });
 
@@ -476,6 +542,7 @@ app.on('second-instance', () => {
 
 app.whenReady().then(() => {
   if (!app.hasSingleInstanceLock()) return;
+  if (IS_LINUX) app.setDesktopName('friends-meet.desktop');
   Menu.setApplicationMenu(null);
   config = loadConfig();
   registerIpc();
@@ -500,6 +567,7 @@ app.whenReady().then(() => {
 
 app.on('before-quit', () => {
   quitting = true;
+  stopOverlayPolling();
   leaveRoom({ keepWindows: true });
   globalShortcut.unregisterAll();
 });
