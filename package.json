@@ -1,6 +1,6 @@
 {
   "name": "friends-meet",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "局域网桌面宠物聊天",
   "main": "src/main/index.js",

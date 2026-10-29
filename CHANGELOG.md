@@ -4,6 +4,23 @@
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-29 · 同乐
+
+> 内置表情素材版权归 Recreate Games / Source Technology 所有，仅限个人、非商业使用。
+
+### 新增
+
+- 内置 58 个猛兽派对粉丝整理表情：角色 22、UI 24、梗图 9、道具 3
+- 聊天条表情面板：按分类浏览、静态缩略图、支持连续点击发送
+- 表情通过房间 WebSocket 广播，所有成员在对应玩家桌宠上方看到动图
+- 同一玩家最多并排展示 3 个不同表情，超出时替换最早的一个
+- 相同表情重复点击只保留一个，并刷新 5 秒展示时间
+
+### 优化
+
+- 表情面板展开时聊天条窗口底边锚定，输入框不会被遮挡
+- 桌宠顶部预留表情空间，避免贴顶时动图出屏
+
 ## [0.1.0] - 2026-10-29 · 初见
 
 ### 新增
@@ -24,5 +41,6 @@
 - 打包产物统一命名为 `friends-meet-<version>-win-x64-portable.exe`
 - 建立 SemVer 版本体系与 GitHub Actions 自动发布流程
 
-[Unreleased]: https://github.com/makise2060/meeting-friends/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/makise2060/meeting-friends/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/makise2060/meeting-friends/releases/tag/v0.2.0
 [0.1.0]: https://github.com/makise2060/meeting-friends/releases/tag/v0.1.0
