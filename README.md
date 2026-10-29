@@ -20,7 +20,7 @@
 | 平台 | 安装方式 |
 | --- | --- |
 | Windows 10/11 x64 | 下载 `friends-meet-<version>-win-x64-portable.exe`，双击运行（便携版，未签名，SmartScreen 需选择「更多信息 → 仍要运行」） |
-| Ubuntu 22.04+ amd64 | 下载 `.deb` 后执行 `sudo apt install ./friends-meet-<version>-linux-amd64.deb`，从应用菜单「好友见面」启动 |
+| Ubuntu 22.04+ amd64 | 下载 `.deb` 后执行 `sudo apt install ./friends-meet-<version>-linux-amd64.deb`，从应用菜单「好友见面」或终端 `friends-meet` 启动 |
 
 Release 页面同时提供 SHA-256 校验文件。Ubuntu 建议使用 X11 会话；Wayland 下置顶、鼠标穿透与全局快捷键可能受限。Linux 防火墙需放行 TCP 47800–47819 与 UDP 47802。
 

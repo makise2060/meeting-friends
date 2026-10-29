@@ -63,7 +63,7 @@
 | Ubuntu 资产 | `friends-meet-<version>-linux-amd64.deb`（Ubuntu 22.04+ amd64） |
 | 校验文件 | 两个资产各配同名 `.sha256`（`sha256sum` 格式），随 Release 一起发布 |
 | 签名 | Windows 未签名，首次运行需在 SmartScreen 选择「更多信息 → 仍要运行」 |
-| Linux 安装 | `sudo apt install ./friends-meet-<version>-linux-amd64.deb`；从菜单「好友见面」启动，安装目录 `/opt/好友见面` |
+| Linux 安装 | `sudo apt install ./friends-meet-<version>-linux-amd64.deb`；从菜单「好友见面」或终端 `friends-meet` 启动，安装目录 `/opt/好友见面` |
 | Linux 会话 | 建议 X11；Wayland 下置顶、鼠标穿透与全局快捷键可能受限 |
 | CI | Windows + Ubuntu matrix 构建；Windows runner 2 倍计费；Artifact 保留 14 天 |
 | 构建限制 | deb 只能在 Ubuntu/Debian 或 CI 构建，Windows 不能交叉构建 |

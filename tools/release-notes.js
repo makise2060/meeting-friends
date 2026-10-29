@@ -109,7 +109,7 @@ if (hasDownloadArgs) {
     `sudo apt install ./${linuxName}`,
     '```',
     '',
-    '从应用菜单「好友见面」启动；建议 X11 会话，Wayland 下置顶、鼠标穿透与全局快捷键可能受限。防火墙需放行 TCP 47800–47819 与 UDP 47802。',
+    '从应用菜单「好友见面」或终端 `friends-meet` 启动；建议 X11 会话，Wayland 下置顶、鼠标穿透与全局快捷键可能受限。防火墙需放行 TCP 47800–47819 与 UDP 47802。',
     '',
     '## 更新内容 / Changes',
     '',
