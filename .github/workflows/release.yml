@@ -63,14 +63,40 @@ jobs:
           version="$(node -p "require('./package.json').version")"
           exe="dist/friends-meet-$version-win-x64-portable.exe"
           test -f "$exe" || { echo "::error::missing $exe"; exit 1; }
+          sha="$(sha256sum "$exe" | cut -d' ' -f1)"
+          printf '%s  %s\n' "$sha" "friends-meet-$version-win-x64-portable.exe" > "$exe.sha256"
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "exe=$exe" >> "$GITHUB_OUTPUT"
+          echo "sha256_file=$exe.sha256" >> "$GITHUB_OUTPUT"
+
+      - name: Prepare release notes
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: |
+          version="${{ steps.meta.outputs.version }}"
+          exe_name="friends-meet-$version-win-x64-portable.exe"
+          sha="$(cut -d' ' -f1 "${{ steps.meta.outputs.sha256_file }}")"
+          node tools/release-notes.js "$version" --notes-out dist/release-notes.md --title-out dist/release-title.txt
+          {
+            echo ""
+            echo "---"
+            echo ""
+            echo "### 安装与校验"
+            echo ""
+            echo "- 下载：\`$exe_name\`"
+            echo "- SHA-256：\`$sha\`"
+            echo "- 平台：Windows x64，便携版，无需安装"
+            echo "- 未签名：首次运行需在 SmartScreen 选择「更多信息 → 仍要运行」"
+            echo "- 更新日志：https://github.com/${GITHUB_REPOSITORY}/blob/main/CHANGELOG.md"
+          } >> dist/release-notes.md
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: friends-meet-${{ steps.meta.outputs.version }}-win-x64
-          path: ${{ steps.meta.outputs.exe }}
+          path: |
+            ${{ steps.meta.outputs.exe }}
+            ${{ steps.meta.outputs.sha256_file }}
           if-no-files-found: error
           retention-days: 14
 
@@ -82,8 +108,12 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           exe="${{ steps.meta.outputs.exe }}"
+          sha="${{ steps.meta.outputs.sha256_file }}"
+          title="$(cat dist/release-title.txt)"
+          notes="dist/release-notes.md"
           if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" "$exe" --clobber
+            gh release edit "$GITHUB_REF_NAME" --title "$title" --notes-file "$notes"
+            gh release upload "$GITHUB_REF_NAME" "$exe" "$sha" --clobber
           else
-            gh release create "$GITHUB_REF_NAME" "$exe" --title "好友见面 $GITHUB_REF_NAME" --generate-notes
+            gh release create "$GITHUB_REF_NAME" "$exe" "$sha" --title "$title" --notes-file "$notes"
           fi
