@@ -226,8 +226,8 @@ function pollOverlayHit() {
 }
 
 function startOverlayPolling() {
-  if (!IS_LINUX || overlayPollTimer || overlayPollUnavailable) return;
-  if (process.env.XDG_SESSION_TYPE === 'wayland' && app.commandLine.getSwitchValue('ozone-platform') !== 'x11') {
+  if (overlayPollTimer || overlayPollUnavailable) return;
+  if (IS_LINUX && process.env.XDG_SESSION_TYPE === 'wayland' && app.commandLine.getSwitchValue('ozone-platform') !== 'x11') {
     overlayPollUnavailable = true;
     console.warn('[overlay] Wayland 会话下禁用鼠标悬停兜底，建议使用 X11 会话');
     return;

@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-10-29
+
+### 修复
+
+- Windows 下桌面层新增光标命中轮询兜底：收起/展开后即使渲染层转发事件没有恢复，主进程也会在光标落到桌宠上时解除鼠标穿透，修复「小人可见但点不到、拖不动」
+
 ## [0.4.0] - 2026-10-29 · 灵动
 
 ### 新增
@@ -65,7 +71,8 @@
 - 打包产物统一命名为 `friends-meet-<version>-win-x64-portable.exe`
 - 建立 SemVer 版本体系与 GitHub Actions 自动发布流程
 
-[Unreleased]: https://github.com/makise2060/meeting-friends/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/makise2060/meeting-friends/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/makise2060/meeting-friends/releases/tag/v0.4.1
 [0.4.0]: https://github.com/makise2060/meeting-friends/releases/tag/v0.4.0
 [0.3.0]: https://github.com/makise2060/meeting-friends/releases/tag/v0.3.0
 [0.2.0]: https://github.com/makise2060/meeting-friends/releases/tag/v0.2.0
