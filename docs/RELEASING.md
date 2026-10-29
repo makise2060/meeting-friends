@@ -50,7 +50,8 @@
 ## 5. Release Notes 规范
 
 - 正文先放「下载 / Downloads」三列表：`OS / 系统`、`Requirements / 版本要求`、`Direct Links / 点击直链下载`；当前只列 Windows 与 Ubuntu 两行，直链指向 `releases/download/<tag>/<asset>`。
-- 随后是 SHA-256 校验表、`.sha256` 链接与安装说明；最后是「更新内容 / Changes」加 CHANGELOG 段落。
+- 下载区采用企业项目常见的 Bettbox 风格：OS 列使用 devicon 图标，下载与 SHA 使用 shields 徽章，校验值折叠在 `<details>` 中；Requirements 用简短版本要求与斜体备注。
+- 随后是安装说明；最后是「更新内容 / Changes」加 CHANGELOG 段落。
 - 由 `tools/release-notes.js` 用 `--repo`、`--tag`、`--win-name`、`--win-sha`、`--linux-name`、`--linux-sha` 生成；CHANGELOG 段落缺失或为空时失败，禁止发布空 Notes。
 - 不在 GitHub 上手工维护 Notes；笔误可临时编辑，但必须回写 CHANGELOG，保持来源一致。
 - Release 默认创建为 **Draft**，确认标题、下载表、资产与校验后才手动 Publish；workflow 不得自动公开。
