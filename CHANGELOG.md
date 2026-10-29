@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-29 · 灵动
+
 ### 新增
 
 - 桌宠碰撞：拖动时会把其他桌宠挤开，撞到屏幕边缘反弹并逐渐减速
@@ -63,7 +65,8 @@
 - 打包产物统一命名为 `friends-meet-<version>-win-x64-portable.exe`
 - 建立 SemVer 版本体系与 GitHub Actions 自动发布流程
 
-[Unreleased]: https://github.com/makise2060/meeting-friends/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/makise2060/meeting-friends/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/makise2060/meeting-friends/releases/tag/v0.4.0
 [0.3.0]: https://github.com/makise2060/meeting-friends/releases/tag/v0.3.0
 [0.2.0]: https://github.com/makise2060/meeting-friends/releases/tag/v0.2.0
 [0.1.0]: https://github.com/makise2060/meeting-friends/releases/tag/v0.1.0
