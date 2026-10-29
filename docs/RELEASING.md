@@ -54,7 +54,7 @@
 - 随后是安装说明；最后是「更新内容 / Changes」加 CHANGELOG 段落。
 - 由 `tools/release-notes.js` 用 `--repo`、`--tag`、`--win-name`、`--win-sha`、`--linux-name`、`--linux-sha` 生成；CHANGELOG 段落缺失或为空时失败，禁止发布空 Notes。
 - 不在 GitHub 上手工维护 Notes；笔误可临时编辑，但必须回写 CHANGELOG，保持来源一致。
-- Release 默认创建为 **Draft**，确认标题、下载表、资产与校验后才手动 Publish；workflow 不得自动公开。
+- Release **默认直接正式发布**；仅当 annotated tag 消息包含 `[draft]` 时创建 Draft，Draft 确认标题、下载表、资产与校验后才手动 Publish。
 
 ## 6. 打包资产
 
@@ -83,17 +83,18 @@
    git push origin vX.Y.Z
    ```
 
-7. workflow 自动完成：校验 tag 与 `package.json` 一致 → 双平台构建与校验 → 生成下载表/Notes → 创建或更新 **Draft Release**，上传两个资产与校验文件。
-8. 核对 Draft 标题、下载表、Notes、4 个资产与 SHA-256；确认后由人工在 GitHub 点击 **Publish release**。workflow 不会自动发布。
-9. 发布后再验证直链可访问；发布前 Draft 直链 404 属预期。
+7. workflow 自动完成：校验 tag 与 `package.json` 一致 → 双平台构建与校验 → 生成下载表/Notes → 创建或更新 Release；tag 消息含 `[draft]` 时创建 Draft，否则直接正式发布，并上传两个资产与校验文件。
+8. 若为 Draft：核对标题、下载表、Notes、4 个资产与 SHA-256，确认后由人工在 GitHub 点击 **Publish release**；默认正式发布无需此步。
+9. 发布后再验证直链可访问；Draft 在发布前直链 404 属预期。
 
 ## 8. 失败与修正
 
 - **tag 与版本不一致**：workflow 在安装依赖前失败。未发布时可删除本地/远端 tag 重打；已发布不移动 tag，改发 patch。
 - **CHANGELOG 缺段落或为空**：workflow 失败。补齐后重打未发布 tag，或发 patch。
 - **Linux 构建/安装校验失败**：看 `dpkg-deb -f/-c` 与 `apt-get install` 日志，修正依赖或打包配置后重跑手动 workflow；不要带错打 tag。
-- **Draft 已存在**：重跑 workflow 会更新标题/Notes 并覆盖资产；**已发布 Release 会被 fail-fast 拒绝修改**，请发 patch。
-- **Draft 内容有误**：未发布可删除 Draft 或删除 tag 重打；已发布不移动 tag。
+- **发布形态**：tag 消息无 `[draft]` → 正式发布；含 `[draft]` → Draft。已发布不可转回 Draft；标记不改 tag。
+- **Draft 已存在**：重跑 workflow 会更新标题/Notes 并覆盖资产；已发布 Release 会被 fail-fast 拒绝修改，请发 patch。
+- **Draft 内容有误**：仅在显式 `[draft]` 且未发布时，可删除 Draft 或删除 tag 重打；已发布不移动 tag。
 - **Release 步骤 403**：检查仓库 Settings → Actions → General 的 Workflow permissions；workflow 本身已声明 `contents: write`。
 - **计费**：私有仓库的 Windows runner 按 2 倍时长计费，避免频繁手动触发。
 
@@ -106,5 +107,6 @@
 - [ ] Notes 含「下载 / Downloads」三列表、SHA-256 与安装说明
 - [ ] 资产含 Windows exe、Ubuntu deb 与各自 `.sha256`
 - [ ] deb 在 Ubuntu CI 中可安装（`dpkg -s` 正常）
-- [ ] Release 为 Draft，人工确认后才 Publish
+- [ ] 未要求 Draft 时为正式 Release；要求 Draft 时 `isDraft=true` 且人工确认后 Publish
+- [ ] tag 消息包含/不包含 `[draft]` 与预期一致
 - [ ] Windows 与 Ubuntu 下载运行后设置页版本号正确

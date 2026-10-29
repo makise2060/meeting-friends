@@ -39,7 +39,7 @@ src/shared/      sprites.js 像素精灵；emotes.js 生成的 58 条表情清�
 src/assets/      emotes/：内置表情原图、静态缩略图与 NOTICE
 tools/           make-icon.js 生成图标；import-emotes.js 导入表情；release-notes.js 生成 Release 元数据
 docs/            RELEASING.md：发布规范
-.github/         release.yml：tag 触发的双平台构建与 Draft 发布 workflow
+.github/         release.yml：tag 触发的双平台构建与发布 workflow（默认正式发布，tag 含 [draft] 时建 Draft）
 build/           打包用图标资源
 dist/            打包产物（不入库）
 CHANGELOG.md     更新日志，Release Notes 的唯一来源
@@ -77,7 +77,7 @@ npm run dist:linux
 - 版本唯一来源是 `package.json`（SemVer），`package-lock.json` 与 `CHANGELOG.md` 需同步更新。
 - Release 标题固定为 `vX.Y.Z · 主题`，主题写在 `CHANGELOG.md` 的版本标题里。
 - Release Notes 自动取自 `CHANGELOG.md`，并附「OS / 系统 · 版本要求 · 直链下载」表、SHA-256 与安装说明。
-- 发版：更新版本与 CHANGELOG → 提交推送 `main` → 手动 workflow 验证双平台 → 打 `vX.Y.Z` tag，Actions 创建 **Draft Release**；确认后在 GitHub 手动 Publish。
+- 发版：更新版本与 CHANGELOG → 提交推送 `main` → 手动 workflow 验证双平台 → 打 `vX.Y.Z` tag。默认直接创建正式 Release；如需 Draft，在 annotated tag 消息中加 `[draft]`（如 `git tag -a vX.Y.Z -m "vX.Y.Z · 主题 [draft]"`），确认后手动 Publish。
 - 资产为 Windows exe、Ubuntu deb 与各自 `.sha256` 校验文件。
 - 产物未签名；Windows 首次运行需在 SmartScreen 选择「更多信息 → 仍要运行」。
 
