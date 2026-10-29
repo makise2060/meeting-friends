@@ -7,6 +7,9 @@ const net = require('node:net');
 const { HostRoom, ClientRoom, localIPs, MAX_PLAYERS, BASE_PORT } = require('./net');
 const { scanRooms, startAnnounce } = require('./discovery');
 
+const CHAT = { w: 480, h: 64, mini: 56, panelExtra: 248 };
+const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
+
 let setupWin = null;
 let overlayWin = null;
 let chatWin = null;
@@ -15,6 +18,7 @@ let roomMode = null;
 let announce = null;
 let quitting = false;
 let chatCollapsed = false;
+let chatPanelOpen = false;
 let config = {};
 
 const CONFIG_PATH = () => path.join(app.getPath('userData'), 'config.json');
@@ -102,8 +106,8 @@ function createOverlayWindow() {
 
 function createChatWindow() {
   const area = screen.getPrimaryDisplay().workArea;
-  const width = 480;
-  const height = 64;
+  const width = CHAT.w;
+  const height = CHAT.h;
   chatWin = new BrowserWindow({
     x: Math.round(area.x + (area.width - width) / 2),
     y: Math.round(area.y + area.height - height - 56),
@@ -159,6 +163,7 @@ function wireRoom(r) {
     chatWin?.webContents.send('chat', msg);
   });
   r.on('move', (msg) => overlayWin?.webContents.send('move', msg));
+  r.on('emote', (msg) => overlayWin?.webContents.send('emote', msg));
   r.on('reconnecting', (n) => toast(`与房主断开，正在重连（${n}/3）…`));
   r.on('reconnected', () => toast('已重新连上'));
   r.on('closed', ({ reason }) => {
@@ -183,29 +188,51 @@ function hideOverlay() {
   overlayWin.hide();
 }
 
+function layoutChat() {
+  if (!chatWin || chatWin.isDestroyed()) return;
+  const b = chatWin.getBounds();
+  const area = screen.getDisplayMatching(b).workArea;
+  const width = chatCollapsed ? CHAT.mini : CHAT.w;
+  const height = chatCollapsed ? CHAT.mini : (chatPanelOpen ? CHAT.h + CHAT.panelExtra : CHAT.h);
+  const x = clamp(b.x + b.width - width, area.x, area.x + area.width - width);
+  const bottom = b.y + b.height;
+  const y = clamp(bottom - height, area.y, area.y + area.height - height);
+  chatWin.setBounds({ x, y, width, height });
+}
+
+function sendPanelState() {
+  if (chatWin && !chatWin.isDestroyed()) {
+    chatWin.webContents.send('panel-state', { open: chatPanelOpen });
+  }
+}
+
+function setChatPanel(open) {
+  const next = Boolean(open) && Boolean(room) && !chatCollapsed;
+  if (chatPanelOpen !== next) {
+    chatPanelOpen = next;
+    layoutChat();
+  }
+  sendPanelState();
+  return next;
+}
+
 function collapseChat(collapsed) {
   if (!chatWin || chatWin.isDestroyed()) return;
   chatCollapsed = collapsed;
-  const b = chatWin.getBounds();
-  const area = screen.getDisplayMatching(b).workArea;
+  if (collapsed) chatPanelOpen = false;
+  layoutChat();
+  sendPanelState();
   if (collapsed) {
-    const size = 56;
-    const x = Math.max(area.x, Math.min(b.x + b.width - size, area.x + area.width - size));
-    const y = Math.max(area.y, Math.min(b.y + b.height - size, area.y + area.height - size));
-    chatWin.setBounds({ x, y, width: size, height: size });
     hideOverlay();
-  } else {
-    const width = 480;
-    const height = 64;
-    const x = Math.max(area.x, Math.min(b.x + b.width - width, area.x + area.width - width));
-    const y = Math.max(area.y, Math.min(b.y + b.height - height, area.y + area.height - height));
-    chatWin.setBounds({ x, y, width, height });
-    if (room) showOverlay();
+  } else if (room) {
+    showOverlay();
   }
 }
 
 function focusChat() {
   if (!chatWin || chatWin.isDestroyed() || !room) return;
+  chatCollapsed = false;
+  chatPanelOpen = false;
   collapseChat(false);
   chatWin.show();
   chatWin.focus();
@@ -214,23 +241,23 @@ function focusChat() {
 
 function enterRoom() {
   chatCollapsed = false;
+  chatPanelOpen = false;
   const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
   const area = display.workArea;
   if (overlayWin && !overlayWin.isDestroyed()) {
     overlayWin.setBounds(area);
   }
   if (chatWin && !chatWin.isDestroyed()) {
-    const width = 480;
-    const height = 64;
     chatWin.setBounds({
-      x: Math.round(area.x + (area.width - width) / 2),
-      y: Math.round(area.y + area.height - height - 56),
-      width,
-      height
+      x: Math.round(area.x + (area.width - CHAT.w) / 2),
+      y: Math.round(area.y + area.height - CHAT.h - 56),
+      width: CHAT.w,
+      height: CHAT.h
     });
     chatWin.show();
     chatWin.focus();
     chatWin.webContents.send('focus-input');
+    sendPanelState();
   }
   if (overlayWin) showOverlay();
   if (setupWin) setupWin.hide();
@@ -241,6 +268,7 @@ function leaveRoom(opts = {}) {
   const r = room;
   room = null;
   roomMode = null;
+  chatPanelOpen = false;
   if (announce) {
     announce.stop();
     announce = null;
@@ -376,9 +404,17 @@ function registerIpc() {
     return true;
   });
 
+  ipcMain.handle('chat:panel', (_e, open) => setChatPanel(Boolean(open)));
+
+  ipcMain.handle('emote:send', (_e, emote) => {
+    if (typeof emote === 'string') room?.sendEmote(emote);
+    return true;
+  });
+
   ipcMain.handle('state:get', () => buildState());
 
   ipcMain.handle('ui:showSetup', () => {
+    setChatPanel(false);
     if (setupWin && !setupWin.isDestroyed()) {
       setupWin.show();
       setupWin.focus();
@@ -449,6 +485,7 @@ app.whenReady().then(() => {
   registerGlobalShortcut();
 
   screen.on('display-metrics-changed', () => {
+    layoutChat();
     if (!overlayWin || overlayWin.isDestroyed()) return;
     const area = screen.getPrimaryDisplay().workArea;
     overlayWin.setBounds(area);

@@ -2,13 +2,21 @@
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self'">
   <title>聊天</title>
   <link rel="stylesheet" href="chatbar.css">
 </head>
 <body>
+  <div id="panel" class="panel">
+    <div class="panel-head">
+      <div id="emoteTabs" class="tabs"></div>
+      <button id="emoteClose" class="icon tiny" title="关闭表情">✕</button>
+    </div>
+    <div id="emoteGrids" class="grids"></div>
+  </div>
   <div class="bar" id="bar">
     <input id="msg" maxlength="200" placeholder="说点什么…（Enter 发送）" autocomplete="off" spellcheck="false">
+    <button id="emoteBtn" class="icon emote" title="表情">☺</button>
     <button id="send" class="primary">发送</button>
     <button id="gear" class="icon" title="房间信息">⚙</button>
     <button id="close" class="icon danger" title="退出房间">✕</button>
@@ -18,6 +26,7 @@
     <canvas id="miniAvatar"></canvas>
   </div>
   <script src="../../shared/sprites.js"></script>
+  <script src="../../shared/emotes.js"></script>
   <script src="chatbar.js"></script>
 </body>
 </html>

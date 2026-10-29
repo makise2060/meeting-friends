@@ -1,12 +1,16 @@
 'use strict';
 
 const Sprites = window.Sprites;
+const Emotes = window.Emotes;
 const stage = document.getElementById('stage');
 
 const SIZE = 96;
 const HALF = SIZE / 2;
 const NAME_SPACE = 26;
 const HIT_PAD = 6;
+const TOP_PAD = 64;
+const EMOTE_MAX = 3;
+const EMOTE_TTL = 5000;
 
 let state = { mode: 'idle', selfId: null, players: [] };
 const pets = new Map();
@@ -37,19 +41,76 @@ function createPet(p) {
   const bubbleEl = document.createElement('div');
   bubbleEl.className = 'bubble';
 
-  el.append(wrap, nameEl, bubbleEl);
+  const emoteRow = document.createElement('div');
+  emoteRow.className = 'emote-row';
+
+  const stack = document.createElement('div');
+  stack.className = 'stack';
+  stack.append(emoteRow, bubbleEl);
+
+  el.append(wrap, nameEl, stack);
   stage.appendChild(el);
 
-  const pet = { id: p.id, el, nameEl, bubbleEl, x: p.x, y: p.y };
+  const pet = { id: p.id, el, nameEl, bubbleEl, emoteRow, emotes: [], x: p.x, y: p.y };
   pets.set(p.id, pet);
   return pet;
+}
+
+function dropEmote(pet, id) {
+  const index = pet.emotes.findIndex((item) => item.id === id);
+  if (index < 0) return;
+  const [item] = pet.emotes.splice(index, 1);
+  clearTimeout(item.timer);
+  item.el.remove();
+}
+
+function clearEmotes(pet) {
+  for (const item of pet.emotes) {
+    clearTimeout(item.timer);
+    item.el.remove();
+  }
+  pet.emotes.length = 0;
+}
+
+function destroyPet(pet) {
+  clearTimeout(bubbleTimers.get(pet.id));
+  clearTimeout(talkTimers.get(pet.id));
+  bubbleTimers.delete(pet.id);
+  talkTimers.delete(pet.id);
+  clearEmotes(pet);
+  pet.el.remove();
+}
+
+function onEmote(msg) {
+  const pet = pets.get(msg.id);
+  const emote = Emotes.byId[msg.emote];
+  if (!pet || !emote) return;
+
+  let item = pet.emotes.find((it) => it.id === msg.emote);
+  if (!item) {
+    if (pet.emotes.length >= EMOTE_MAX) dropEmote(pet, pet.emotes[0].id);
+    const img = new Image();
+    img.src = Emotes.url(emote);
+    img.alt = emote.nameZh;
+    img.dataset.emote = msg.emote;
+    img.decoding = 'async';
+    pet.emoteRow.appendChild(img);
+    item = { id: msg.emote, el: img, timer: 0 };
+    pet.emotes.push(item);
+  }
+
+  clearTimeout(item.timer);
+  item.timer = setTimeout(() => dropEmote(pet, item.id), EMOTE_TTL);
+  item.el.classList.remove('pop');
+  void item.el.offsetWidth;
+  item.el.classList.add('pop');
 }
 
 function place(el, x, y, animate) {
   const W = window.innerWidth;
   const H = window.innerHeight;
   const left = clamp(x * W - HALF, 0, W - SIZE);
-  const top = clamp(y * H - HALF, 0, H - SIZE - NAME_SPACE);
+  const top = clamp(y * H - HALF, TOP_PAD, H - SIZE - NAME_SPACE);
   el.style.transition = animate ? 'left .12s linear, top .12s linear' : 'none';
   el.style.left = left + 'px';
   el.style.top = top + 'px';
@@ -57,7 +118,7 @@ function place(el, x, y, animate) {
 
 function sync() {
   if (state.mode === 'idle') {
-    for (const pet of pets.values()) pet.el.remove();
+    for (const pet of pets.values()) destroyPet(pet);
     pets.clear();
     return;
   }
@@ -77,12 +138,8 @@ function sync() {
   }
   for (const [id, pet] of [...pets]) {
     if (!seen.has(id)) {
-      pet.el.remove();
+      destroyPet(pet);
       pets.delete(id);
-      clearTimeout(bubbleTimers.get(id));
-      clearTimeout(talkTimers.get(id));
-      bubbleTimers.delete(id);
-      talkTimers.delete(id);
     }
   }
 }
@@ -127,6 +184,7 @@ function hitTest(x, y) {
 function resetInteraction() {
   dragging = null;
   document.body.classList.remove('dragging');
+  for (const pet of pets.values()) clearEmotes(pet);
   if (interactive) {
     interactive = false;
     api.setInteractive(false);
@@ -170,7 +228,7 @@ window.addEventListener('mousemove', (e) => {
   const W = window.innerWidth;
   const H = window.innerHeight;
   const cx = clamp(e.clientX - dragging.offX, HALF, W - HALF);
-  const cy = clamp(e.clientY - dragging.offY, HALF, H - HALF);
+  const cy = clamp(e.clientY - dragging.offY, HALF + TOP_PAD, H - HALF);
   dragging.pet.el.style.transition = 'none';
   dragging.pet.el.style.left = (cx - HALF) + 'px';
   dragging.pet.el.style.top = (cy - HALF) + 'px';
@@ -187,7 +245,7 @@ window.addEventListener('mouseup', () => {
   const W = window.innerWidth;
   const H = window.innerHeight;
   const cx = clamp(parseFloat(pet.el.style.left) + HALF, HALF, W - HALF);
-  const cy = clamp(parseFloat(pet.el.style.top) + HALF, HALF, H - HALF);
+  const cy = clamp(parseFloat(pet.el.style.top) + HALF, HALF + TOP_PAD, H - HALF);
   api.movePet(dragging.id, cx / W, cy / H);
   dragging = null;
   document.body.classList.remove('dragging');
@@ -205,6 +263,7 @@ api.onState((s) => {
 });
 api.onMove(onMove);
 api.onChat(onChat);
+api.onEmote(onEmote);
 api.onRelayout(() => {
   for (const pet of pets.values()) place(pet.el, pet.x, pet.y, false);
 });
