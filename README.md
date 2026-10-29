@@ -23,9 +23,12 @@ src/main/        主进程：窗口管理、IPC、房间服务端 / 客户端、
 src/preload/     setup / overlay / chatbar 三个窗口的 preload 桥接
 src/renderer/    setup（大厅）、overlay（桌宠层）、chatbar（聊天条）界面
 src/shared/      像素精灵定义与绘制
-tools/           make-icon.js：生成应用图标
+tools/           make-icon.js 生成图标；release-notes.js 生成 Release 元数据
+docs/            RELEASING.md：发布规范
+.github/         release.yml：tag 触发的构建与发布 workflow
 build/           打包用图标资源
 dist/            打包产物（不入库）
+CHANGELOG.md     更新日志，Release Notes 的唯一来源
 ```
 
 ## 开发
@@ -45,15 +48,14 @@ npm run dist
 
 ## 版本与发布
 
-- 采用 SemVer，版本唯一来源是 `package.json`；修改版本时需同步 `package-lock.json` 的 `version`。
-- 发布流程：
-  1. 修改两处版本号，提交并推送 `main`；
-  2. 在 Actions → Release 手动运行一次，从 Artifacts 下载产物验证；
-  3. `git tag -a vX.Y.Z -m "好友见面 vX.Y.Z"` 并推送 tag；
-  4. workflow 自动构建并创建 GitHub Release，资产为 `friends-meet-X.Y.Z-win-x64-portable.exe`。
-- 手动运行只上传 Artifacts（保留 14 天），不创建 Release；推送 `v*` tag 才会发布。
-- 当前仅支持 Windows x64，产物未签名，首次运行需在 SmartScreen 提示里选择「更多信息 → 仍要运行」。
-- 私有仓库的 Windows runner 按 2 倍时长计费，避免频繁触发。
+完整规范见 [docs/RELEASING.md](docs/RELEASING.md)，要点：
+
+- 版本唯一来源是 `package.json`（SemVer），`package-lock.json` 与 `CHANGELOG.md` 需同步更新。
+- Release 标题固定为 `vX.Y.Z · 主题`，主题写在 `CHANGELOG.md` 的版本标题里。
+- Release Notes 自动取自 `CHANGELOG.md` 对应版本段落，并追加 SHA-256、平台与安装说明。
+- 发版：更新版本与 CHANGELOG → 提交推送 `main` → 打 `vX.Y.Z` tag 并推送，Actions 自动构建发布；手动 `workflow_dispatch` 只上传 Artifact。
+- 资产为 `friends-meet-X.Y.Z-win-x64-portable.exe` 与同名 `.sha256` 校验文件。
+- 产物未签名，首次运行需在 SmartScreen 选择「更多信息 → 仍要运行」。
 
 ## 网络与端口
 
