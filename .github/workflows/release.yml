@@ -120,7 +120,7 @@ jobs:
           retention-days: 14
 
   release:
-    name: Draft release
+    name: Release
     needs: build
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
@@ -128,6 +128,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -140,7 +142,7 @@ jobs:
           path: release-assets
           merge-multiple: true
 
-      - name: Create draft release
+      - name: Create release
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -148,6 +150,11 @@ jobs:
         run: |
           set -euo pipefail
           version="${GITHUB_REF_NAME#v}"
+          tag_message="$(git tag -l --format='%(contents)' "$GITHUB_REF_NAME" 2>/dev/null || true)"
+          want_draft=false
+          if printf '%s' "$tag_message" | grep -qi '\[draft\]'; then
+            want_draft=true
+          fi
           win="$(find release-assets -maxdepth 1 -type f -name 'friends-meet-*-win-x64-portable.exe' | head -1)"
           deb="$(find release-assets -maxdepth 1 -type f -name 'friends-meet-*-linux-amd64.deb' | head -1)"
           test -n "$win" || { echo "::error::missing Windows exe"; exit 1; }
@@ -175,11 +182,19 @@ jobs:
             fi
             gh release edit "$GITHUB_REF_NAME" --title "$title" --notes-file release-notes.md
             gh release upload "$GITHUB_REF_NAME" "${assets[@]}" --clobber
-          else
+            echo "Draft release: https://github.com/$GITHUB_REPOSITORY/releases/tag/$GITHUB_REF_NAME"
+          elif [ "$want_draft" = "true" ]; then
             gh release create "$GITHUB_REF_NAME" \
               --draft --verify-tag \
               --title "$title" \
               --notes-file release-notes.md \
               "${assets[@]}"
+            echo "Draft release: https://github.com/$GITHUB_REPOSITORY/releases/tag/$GITHUB_REF_NAME"
+          else
+            gh release create "$GITHUB_REF_NAME" \
+              --verify-tag \
+              --title "$title" \
+              --notes-file release-notes.md \
+              "${assets[@]}"
+            echo "Published release: https://github.com/$GITHUB_REPOSITORY/releases/tag/$GITHUB_REF_NAME"
           fi
-          echo "Draft release: https://github.com/$GITHUB_REPOSITORY/releases/tag/$GITHUB_REF_NAME"
