@@ -1,6 +1,7 @@
 {
   "name": "friends-meet",
-  "version": "1.0.0",
+  "version": "0.1.0",
+  "private": true,
   "description": "局域网桌面宠物聊天",
   "main": "src/main/index.js",
   "scripts": {
@@ -40,7 +41,7 @@
       "icon": "build/icon.png"
     },
     "portable": {
-      "artifactName": "好友见面-${version}.exe"
+      "artifactName": "friends-meet-${version}-win-x64-portable.exe"
     }
   }
 }
