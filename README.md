@@ -11,7 +11,18 @@
 - **聊天条**：屏幕底部悬浮输入条，可折叠成小头像；`Ctrl + Alt + Space` 随时呼出输入
 - **断线重连**：客户端与房主断开后自动重连（最多 3 次）
 - **网络自检**：内置广播扫描与端口连通性测试，方便排查防火墙问题
-- **便携打包**：electron-builder 输出 Windows 单文件便携 exe
+- **双平台打包**：Windows 单文件便携 exe + Ubuntu/Debian `deb`
+
+## 下载与安装
+
+在 [Releases](https://github.com/makise2060/meeting-friends/releases/latest) 下载对应平台的安装包：
+
+| 平台 | 安装方式 |
+| --- | --- |
+| Windows 10/11 x64 | 下载 `friends-meet-<version>-win-x64-portable.exe`，双击运行（便携版，未签名，SmartScreen 需选择「更多信息 → 仍要运行」） |
+| Ubuntu 22.04+ amd64 | 下载 `.deb` 后执行 `sudo apt install ./friends-meet-<version>-linux-amd64.deb`，从应用菜单「好友见面」启动 |
+
+Release 页面同时提供 SHA-256 校验文件。Ubuntu 建议使用 X11 会话；Wayland 下置顶、鼠标穿透与全局快捷键可能受限。Linux 防火墙需放行 TCP 47800–47819 与 UDP 47802。
 
 ## 技术栈
 
@@ -27,7 +38,7 @@ src/shared/      sprites.js 像素精灵；emotes.js 生成的 58 条表情清�
 src/assets/      emotes/：内置表情原图、静态缩略图与 NOTICE
 tools/           make-icon.js 生成图标；import-emotes.js 导入表情；release-notes.js 生成 Release 元数据
 docs/            RELEASING.md：发布规范
-.github/         release.yml：tag 触发的构建与发布 workflow
+.github/         release.yml：tag 触发的双平台构建与 Draft 发布 workflow
 build/           打包用图标资源
 dist/            打包产物（不入库）
 CHANGELOG.md     更新日志，Release Notes 的唯一来源
@@ -40,7 +51,9 @@ npm install
 npm start
 ```
 
-## 打包（Windows）
+## 打包
+
+### Windows
 
 ```bash
 npm run dist
@@ -48,16 +61,24 @@ npm run dist
 
 产物为 `dist/friends-meet-<version>-win-x64-portable.exe`（portable 便携版，版本取自 `package.json`）。界面显示名仍为「好友见面」。
 
+### Ubuntu / Debian
+
+```bash
+npm run dist:linux
+```
+
+产物为 `dist/friends-meet-<version>-linux-amd64.deb`。deb 只能在 Ubuntu/Debian 或 CI 中构建，Windows 不能交叉构建；本机无 Linux 环境时使用 GitHub Actions 的手动构建。
+
 ## 版本与发布
 
 完整规范见 [docs/RELEASING.md](docs/RELEASING.md)，要点：
 
 - 版本唯一来源是 `package.json`（SemVer），`package-lock.json` 与 `CHANGELOG.md` 需同步更新。
 - Release 标题固定为 `vX.Y.Z · 主题`，主题写在 `CHANGELOG.md` 的版本标题里。
-- Release Notes 自动取自 `CHANGELOG.md` 对应版本段落，并追加 SHA-256、平台与安装说明。
-- 发版：更新版本与 CHANGELOG → 提交推送 `main` → 打 `vX.Y.Z` tag 并推送，Actions 自动构建发布；手动 `workflow_dispatch` 只上传 Artifact。
-- 资产为 `friends-meet-X.Y.Z-win-x64-portable.exe` 与同名 `.sha256` 校验文件。
-- 产物未签名，首次运行需在 SmartScreen 选择「更多信息 → 仍要运行」。
+- Release Notes 自动取自 `CHANGELOG.md`，并附「OS / 系统 · 版本要求 · 直链下载」表、SHA-256 与安装说明。
+- 发版：更新版本与 CHANGELOG → 提交推送 `main` → 手动 workflow 验证双平台 → 打 `vX.Y.Z` tag，Actions 创建 **Draft Release**；确认后在 GitHub 手动 Publish。
+- 资产为 Windows exe、Ubuntu deb 与各自 `.sha256` 校验文件。
+- 产物未签名；Windows 首次运行需在 SmartScreen 选择「更多信息 → 仍要运行」。
 
 ## 表情素材与版权
 
@@ -73,6 +94,7 @@ npm run dist
 | UDP 房间广播发现 | 47802 |
 
 - 首次开房间时 Windows 会弹防火墙提示，需允许访问并只勾选「专用网络」，否则其他设备连不进来。
+- Ubuntu 需在防火墙放行 TCP 47800–47819 与 UDP 47802。
 - 仅支持同一局域网直连，没有公网穿透和中继。
 - 房间码是 4 位数字，只用于防止朋友误入，不构成安全认证；请只在信任的局域网内使用。
 
