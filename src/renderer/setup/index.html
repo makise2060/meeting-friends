@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:">
+  <title>好友见面</title>
+  <link rel="stylesheet" href="setup.css">
+</head>
+<body>
+  <div class="app">
+    <header class="hero">
+      <div class="hero-text">
+        <div class="title">好友见面</div>
+        <div class="sub">局域网桌面宠物 · 只在你信任的网络上用</div>
+      </div>
+      <div class="hero-pets" id="heroPets"></div>
+    </header>
+
+    <main id="lobby">
+      <section class="card">
+        <div class="card-head">
+          <h2>你是谁</h2>
+          <span class="hint">昵称和形象别人都能看到</span>
+        </div>
+        <input id="name" class="text" maxlength="12" placeholder="输入昵称，最多 12 个字" spellcheck="false">
+        <div id="avatars" class="avatars"></div>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <h2>附近房间</h2>
+          <button id="refreshRooms" class="ghost small">刷新</button>
+        </div>
+        <div id="rooms" class="rooms">
+          <div class="empty">正在搜索局域网里的房间…</div>
+        </div>
+        <div class="manual">
+          <div class="manual-title">或手动加入</div>
+          <input id="ip" class="text" placeholder="房主 IP，例如 192.168.1.5" spellcheck="false">
+          <div class="manual-row">
+            <input id="port" class="text narrow" value="47800" placeholder="端口" spellcheck="false">
+            <input id="code" class="text narrow" maxlength="4" inputmode="numeric" placeholder="4 位房间码">
+            <button id="joinBtn" class="primary grow">加入</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="card host-card">
+        <div class="card-head">
+          <h2>开一个房间</h2>
+          <span class="hint">房主关掉软件，房间就结束了</span>
+        </div>
+        <div class="host-row">
+          <div class="code-line">房间码 <b id="hostCode" class="code">----</b></div>
+          <button id="regenCode" class="ghost small">换一个</button>
+          <button id="hostBtn" class="primary">开房间</button>
+        </div>
+        <div class="hint host-note">第一次开房 Windows 会弹防火墙提示，必须点“允许访问”，只勾“专用网络”，否则别人连不进来。</div>
+      </section>
+
+      <section class="card diag-card">
+        <div class="card-head">
+          <h2>网络自检</h2>
+          <button id="diagToggle" class="ghost small">展开</button>
+        </div>
+        <div id="diagPanel" class="diag-panel" hidden>
+          <div class="diag-actions">
+            <button id="diagRun" class="ghost small">扫描房间广播</button>
+            <span class="hint">另一台电脑开房后点这里，能收到就说明广播通。</span>
+          </div>
+          <div id="diagResult" class="diag-result">还没自检。</div>
+          <div class="manual-row diag-port-row">
+            <input id="diagIp" class="text" placeholder="对方 IP" spellcheck="false">
+            <input id="diagPort" class="text narrow" value="47800" spellcheck="false">
+            <button id="diagTest" class="ghost small">测端口</button>
+          </div>
+          <div class="hint">Windows 第一次运行会弹防火墙提示，必须点“允许访问”，并只勾选“专用网络”。</div>
+        </div>
+      </section>
+
+      <footer class="footer">
+        <span>快捷键 Ctrl+Alt+空格 聚焦输入框</span>
+        <span>聊天不留记录，关掉就没了</span>
+      </footer>
+    </main>
+
+    <main id="roomView" hidden>
+      <section class="card">
+        <div class="card-head">
+          <h2 id="roomName">房间</h2>
+          <span id="roomMode" class="badge">房主</span>
+        </div>
+        <div class="room-info">
+          <div class="code-line">
+            房间码 <b id="roomCode" class="code">----</b>
+            <button id="copyCode" class="ghost small">复制</button>
+          </div>
+          <div id="roomIPs" class="ips"></div>
+          <div class="hint">把 IP、端口和房间码发给朋友，他们在“或手动加入”里填上就能进来。</div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <h2>房间里的人</h2>
+          <span id="peopleCount" class="hint"></span>
+        </div>
+        <ul id="members" class="members"></ul>
+      </section>
+
+      <div class="room-actions">
+        <button id="backToChat" class="primary grow">回到桌面</button>
+        <button id="leaveBtn" class="danger">退出房间</button>
+      </div>
+    </main>
+
+    <div id="toast" class="toast" hidden></div>
+  </div>
+
+  <script src="../../shared/sprites.js"></script>
+  <script src="setup.js"></script>
+</body>
+</html>

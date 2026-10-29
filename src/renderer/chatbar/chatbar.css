@@ -1,0 +1,132 @@
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  width: 100%;
+  height: 100%;
+  background: transparent;
+  overflow: hidden;
+}
+
+body {
+  display: flex;
+  align-items: center;
+  padding: 6px 8px;
+  font-family: "Microsoft YaHei UI", "Microsoft YaHei", system-ui, sans-serif;
+  user-select: none;
+}
+
+.bar {
+  -webkit-app-region: drag;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 52px;
+  padding: 0 8px 0 14px;
+  border-radius: 14px;
+  background: rgba(22, 24, 31, .93);
+  border: 1px solid rgba(255, 255, 255, .09);
+  box-shadow: 0 12px 34px rgba(0, 0, 0, .45);
+  backdrop-filter: blur(10px);
+}
+
+#msg {
+  -webkit-app-region: no-drag;
+  flex: 1;
+  min-width: 0;
+  height: 36px;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: #ece9e2;
+  font-size: 14px;
+  font-family: inherit;
+  user-select: text;
+}
+
+#msg::placeholder { color: #6b7283; }
+
+button {
+  -webkit-app-region: no-drag;
+  flex: none;
+  height: 34px;
+  border: none;
+  border-radius: 9px;
+  font-family: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition: filter .15s, background .15s;
+}
+
+button.primary {
+  padding: 0 14px;
+  background: #f2b53a;
+  color: #221a06;
+  font-weight: 700;
+}
+
+button.primary:hover { filter: brightness(1.08); }
+
+button.icon {
+  width: 34px;
+  background: #262b36;
+  color: #b9bfcb;
+  font-size: 15px;
+  line-height: 1;
+  font-family: "Segoe UI Symbol", "Microsoft YaHei", sans-serif;
+}
+
+button.icon:hover { background: #313845; color: #fff; }
+
+button.icon.danger { color: #e09090; }
+
+button.icon.danger:hover { background: #3a2020; color: #ffb0b0; }
+
+button.icon.caret {
+  font-size: 11px;
+  color: #8b93a3;
+}
+
+button:active { transform: translateY(1px); }
+
+.mini {
+  display: none;
+  position: relative;
+  width: 44px;
+  height: 44px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  background: rgba(22, 24, 31, .95);
+  border: 1px solid rgba(255, 255, 255, .14);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, .45);
+  cursor: pointer;
+  transition: transform .12s, border-color .12s;
+}
+
+.mini:hover {
+  transform: translateY(-1px);
+  border-color: rgba(242, 181, 58, .7);
+}
+
+.mini canvas {
+  width: 32px;
+  height: 32px;
+  image-rendering: pixelated;
+}
+
+.mini.has-dot::after {
+  content: "";
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #e06c6c;
+  border: 2px solid #14161c;
+}
+
+body.collapsed .bar { display: none; }
+body.collapsed .mini { display: flex; }
+body.collapsed { justify-content: center; align-items: center; padding: 6px; }
