@@ -23,7 +23,6 @@
     "directories": {
       "output": "dist"
     },
-    "electronDist": "node_modules/electron/dist",
     "disableAsarIntegrity": true,
     "files": [
       "src/**/*",
