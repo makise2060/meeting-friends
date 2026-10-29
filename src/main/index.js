@@ -168,6 +168,21 @@ function wireRoom(r) {
   });
 }
 
+function showOverlay() {
+  if (!overlayWin || overlayWin.isDestroyed()) return;
+  overlayWin.showInactive();
+  overlayWin.setIgnoreMouseEvents(true, { forward: true });
+  overlayWin.webContents.send('relayout');
+  overlayWin.webContents.send('overlay:reset');
+}
+
+function hideOverlay() {
+  if (!overlayWin || overlayWin.isDestroyed()) return;
+  overlayWin.webContents.send('overlay:reset');
+  overlayWin.setIgnoreMouseEvents(true, { forward: true });
+  overlayWin.hide();
+}
+
 function collapseChat(collapsed) {
   if (!chatWin || chatWin.isDestroyed()) return;
   chatCollapsed = collapsed;
@@ -178,20 +193,14 @@ function collapseChat(collapsed) {
     const x = Math.max(area.x, Math.min(b.x + b.width - size, area.x + area.width - size));
     const y = Math.max(area.y, Math.min(b.y + b.height - size, area.y + area.height - size));
     chatWin.setBounds({ x, y, width: size, height: size });
-    if (overlayWin && !overlayWin.isDestroyed()) {
-      overlayWin.setIgnoreMouseEvents(true, { forward: true });
-      overlayWin.hide();
-    }
+    hideOverlay();
   } else {
     const width = 480;
     const height = 64;
     const x = Math.max(area.x, Math.min(b.x + b.width - width, area.x + area.width - width));
     const y = Math.max(area.y, Math.min(b.y + b.height - height, area.y + area.height - height));
     chatWin.setBounds({ x, y, width, height });
-    if (overlayWin && !overlayWin.isDestroyed() && room) {
-      overlayWin.showInactive();
-      overlayWin.webContents.send('relayout');
-    }
+    if (room) showOverlay();
   }
 }
 
@@ -209,7 +218,6 @@ function enterRoom() {
   const area = display.workArea;
   if (overlayWin && !overlayWin.isDestroyed()) {
     overlayWin.setBounds(area);
-    overlayWin.webContents.send('relayout');
   }
   if (chatWin && !chatWin.isDestroyed()) {
     const width = 480;
@@ -224,7 +232,7 @@ function enterRoom() {
     chatWin.focus();
     chatWin.webContents.send('focus-input');
   }
-  if (overlayWin) overlayWin.showInactive();
+  if (overlayWin) showOverlay();
   if (setupWin) setupWin.hide();
   sendState();
 }
@@ -242,10 +250,7 @@ function leaveRoom(opts = {}) {
     try { r.stop(); } catch { /* ignore */ }
   }
   if (opts.keepWindows) return;
-  if (overlayWin && !overlayWin.isDestroyed()) {
-    overlayWin.setIgnoreMouseEvents(true, { forward: true });
-    overlayWin.hide();
-  }
+  hideOverlay();
   if (chatWin && !chatWin.isDestroyed()) chatWin.hide();
   if (setupWin && !setupWin.isDestroyed()) {
     setupWin.show();

@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld('api', {
   onChat: (cb) => ipcRenderer.on('chat', (_e, msg) => cb(msg)),
   onMove: (cb) => ipcRenderer.on('move', (_e, msg) => cb(msg)),
   onRelayout: (cb) => ipcRenderer.on('relayout', () => cb()),
+  onReset: (cb) => ipcRenderer.on('overlay:reset', () => cb()),
   setInteractive: (on) => ipcRenderer.invoke('overlay:interactive', on),
   movePet: (id, x, y) => ipcRenderer.invoke('pet:move', { id, x, y })
 });

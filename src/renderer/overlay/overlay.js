@@ -124,6 +124,16 @@ function hitTest(x, y) {
   return null;
 }
 
+function resetInteraction() {
+  dragging = null;
+  document.body.classList.remove('dragging');
+  if (interactive) {
+    interactive = false;
+    api.setInteractive(false);
+  }
+  document.body.classList.remove('interactive');
+}
+
 window.addEventListener('mousemove', (e) => {
   if (dragging) return;
   const hit = !!hitTest(e.clientX, e.clientY);
@@ -198,3 +208,4 @@ api.onChat(onChat);
 api.onRelayout(() => {
   for (const pet of pets.values()) place(pet.el, pet.x, pet.y, false);
 });
+api.onReset(resetInteraction);
