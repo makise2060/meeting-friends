@@ -7,6 +7,7 @@
 - **附近房间**：UDP 广播自动发现局域网的房间，也可手动填 IP / 端口 / 4 位房间码加入
 - **开房间**：房主即为服务端，最多 8 人，可移出成员；房主关闭软件房间即结束
 - **桌面宠物层**：透明置顶覆盖层，像素小人（狗 / 猫 / 兔等）在桌面上移动、带名字和聊天气泡
+- **表情互动**：内置 58 个猛兽派对表情，聊天条按分类选择；桌宠上方最多并排展示 3 个不同表情，相同表情只保留一个
 - **聊天条**：屏幕底部悬浮输入条，可折叠成小头像；`Ctrl + Alt + Space` 随时呼出输入
 - **断线重连**：客户端与房主断开后自动重连（最多 3 次）
 - **网络自检**：内置广播扫描与端口连通性测试，方便排查防火墙问题
@@ -22,8 +23,9 @@ Electron 45 + Node.js 原生 `net` / `dgram` + `ws`（WebSocket）。渲染层�
 src/main/        主进程：窗口管理、IPC、房间服务端 / 客户端、UDP 发现
 src/preload/     setup / overlay / chatbar 三个窗口的 preload 桥接
 src/renderer/    setup（大厅）、overlay（桌宠层）、chatbar（聊天条）界面
-src/shared/      像素精灵定义与绘制
-tools/           make-icon.js 生成图标；release-notes.js 生成 Release 元数据
+src/shared/      sprites.js 像素精灵；emotes.js 生成的 58 条表情清单
+src/assets/      emotes/：内置表情原图、静态缩略图与 NOTICE
+tools/           make-icon.js 生成图标；import-emotes.js 导入表情；release-notes.js 生成 Release 元数据
 docs/            RELEASING.md：发布规范
 .github/         release.yml：tag 触发的构建与发布 workflow
 build/           打包用图标资源
@@ -56,6 +58,12 @@ npm run dist
 - 发版：更新版本与 CHANGELOG → 提交推送 `main` → 打 `vX.Y.Z` tag 并推送，Actions 自动构建发布；手动 `workflow_dispatch` 只上传 Artifact。
 - 资产为 `friends-meet-X.Y.Z-win-x64-portable.exe` 与同名 `.sha256` 校验文件。
 - 产物未签名，首次运行需在 SmartScreen 选择「更多信息 → 仍要运行」。
+
+## 表情素材与版权
+
+内置表情来自 Party Animals（猛兽派对）官方论坛帖《分享一些猛兽表情》的粉丝整理，共 58 个。素材版权归 Recreate Games / Source Technology 所有，仅限个人、非商业使用，与本项目无隶属关系；如权利方要求请立即移除。
+
+来源、整理与去重说明见 `src/assets/emotes/NOTICE.md`；重新导入素材使用 `node tools/import-emotes.js <素材目录>`。
 
 ## 网络与端口
 
