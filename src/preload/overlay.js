@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld('api', {
   onReset: (cb) => ipcRenderer.on('overlay:reset', () => cb()),
   setInteractive: (on) => ipcRenderer.invoke('overlay:interactive', on),
   setDragging: (on) => ipcRenderer.invoke('overlay:dragging', on),
+  debugLog: (tag, data) => ipcRenderer.invoke('overlay:debug', tag, data),
   movePet: (id, x, y) => ipcRenderer.invoke('pet:move', { id, x, y }),
   grabPet: (id) => ipcRenderer.invoke('pet:grab', id),
   releasePet: (id, x, y, vx, vy) => ipcRenderer.invoke('pet:release', { id, x, y, vx, vy })

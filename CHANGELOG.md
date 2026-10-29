@@ -4,6 +4,16 @@
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-10-29
+
+### 修复
+
+- 桌面层重新显示时重新置顶（`setAlwaysOnTop` + `moveTop`），避免收起/展开后落在其他置顶窗口之下、点击被截走
+
+### 诊断
+
+- 新增 `overlay-debug.log`：记录交互状态切换及来源、悬停、鼠标按下/松开、拖拽开始和渲染层异常，用于定位 Windows 点击失效
+
 ## [0.4.1] - 2026-10-29
 
 ### 修复
@@ -71,7 +81,8 @@
 - 打包产物统一命名为 `friends-meet-<version>-win-x64-portable.exe`
 - 建立 SemVer 版本体系与 GitHub Actions 自动发布流程
 
-[Unreleased]: https://github.com/makise2060/meeting-friends/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/makise2060/meeting-friends/compare/v0.4.2...HEAD
+[0.4.2]: https://github.com/makise2060/meeting-friends/releases/tag/v0.4.2
 [0.4.1]: https://github.com/makise2060/meeting-friends/releases/tag/v0.4.1
 [0.4.0]: https://github.com/makise2060/meeting-friends/releases/tag/v0.4.0
 [0.3.0]: https://github.com/makise2060/meeting-friends/releases/tag/v0.3.0

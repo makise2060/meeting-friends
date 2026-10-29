@@ -28,6 +28,13 @@ let overlayPollUnavailable = false;
 let config = {};
 
 const CONFIG_PATH = () => path.join(app.getPath('userData'), 'config.json');
+const DEBUG_LOG_PATH = () => path.join(app.getPath('userData'), 'overlay-debug.log');
+
+function debugLog(tag, data) {
+  try {
+    fs.appendFileSync(DEBUG_LOG_PATH(), `${new Date().toISOString()} ${tag} ${data === undefined ? '' : JSON.stringify(data)}\n`);
+  } catch { /* ignore */ }
+}
 
 function loadConfig() {
   try { return JSON.parse(fs.readFileSync(CONFIG_PATH(), 'utf8')); } catch { return {}; }
@@ -191,10 +198,16 @@ function wireRoom(r) {
   });
 }
 
-function setOverlayInteractive(on, force = false) {
+function setOverlayInteractive(on, force = false, source = '?') {
   const next = Boolean(on);
   if (!force && next === overlayInteractive) return;
   overlayInteractive = next;
+  debugLog('interactive', {
+    next,
+    source,
+    visible: overlayWin ? overlayWin.isVisible() : null,
+    onTop: overlayWin ? overlayWin.isAlwaysOnTop() : null
+  });
   if (overlayWin && !overlayWin.isDestroyed()) {
     overlayWin.setIgnoreMouseEvents(!next, IS_LINUX ? undefined : { forward: true });
   }
@@ -203,7 +216,7 @@ function setOverlayInteractive(on, force = false) {
 function pollOverlayHit() {
   if (overlayDragging) return;
   if (!overlayWin || overlayWin.isDestroyed() || !overlayWin.isVisible() || !room) {
-    setOverlayInteractive(false);
+    setOverlayInteractive(false, false, 'poll-idle');
     return;
   }
   let point;
@@ -222,7 +235,7 @@ function pollOverlayHit() {
     const cy = clamp(p.y * b.height, PET.TOP + half, b.height - PET.NAME - half);
     return Math.abs(x - cx) <= radius && Math.abs(y - cy) <= radius;
   });
-  setOverlayInteractive(hit);
+  setOverlayInteractive(hit, false, 'poll');
 }
 
 function startOverlayPolling() {
@@ -244,18 +257,23 @@ function stopOverlayPolling() {
 
 function showOverlay() {
   if (!overlayWin || overlayWin.isDestroyed()) return;
+  debugLog('show', { visible: overlayWin.isVisible(), bounds: overlayWin.getBounds() });
   overlayWin.showInactive();
-  setOverlayInteractive(false, true);
+  overlayWin.setAlwaysOnTop(true, 'screen-saver');
+  if (typeof overlayWin.moveTop === 'function') overlayWin.moveTop();
+  setOverlayInteractive(false, true, 'show');
   overlayWin.webContents.send('relayout');
   overlayWin.webContents.send('overlay:reset');
   startOverlayPolling();
+  debugLog('show-done', { visible: overlayWin.isVisible(), onTop: overlayWin.isAlwaysOnTop() });
 }
 
 function hideOverlay() {
   if (!overlayWin || overlayWin.isDestroyed()) return;
+  debugLog('hide', {});
   stopOverlayPolling();
   overlayWin.webContents.send('overlay:reset');
-  setOverlayInteractive(false, true);
+  setOverlayInteractive(false, true, 'hide');
   overlayWin.hide();
 }
 
@@ -519,13 +537,19 @@ function registerIpc() {
   });
 
   ipcMain.handle('overlay:interactive', (_e, on) => {
-    setOverlayInteractive(on);
+    setOverlayInteractive(on, false, 'renderer');
     return true;
   });
 
   ipcMain.handle('overlay:dragging', (_e, on) => {
     overlayDragging = Boolean(on);
-    if (overlayDragging) setOverlayInteractive(true, true);
+    debugLog('dragging', { on: overlayDragging });
+    if (overlayDragging) setOverlayInteractive(true, true, 'drag');
+    return true;
+  });
+
+  ipcMain.handle('overlay:debug', (_e, tag, data) => {
+    debugLog('r:' + String(tag), data);
     return true;
   });
 
@@ -569,6 +593,8 @@ app.whenReady().then(() => {
   if (IS_LINUX) app.setDesktopName('friends-meet.desktop');
   Menu.setApplicationMenu(null);
   config = loadConfig();
+  try { fs.writeFileSync(DEBUG_LOG_PATH(), ''); } catch { /* ignore */ }
+  debugLog('start', { version: app.getVersion(), platform: process.platform, e2e: !!process.env.FRIENDS_E2E });
   registerIpc();
   createSetupWindow();
   createOverlayWindow();

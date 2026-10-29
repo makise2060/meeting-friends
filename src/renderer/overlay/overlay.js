@@ -317,6 +317,7 @@ window.addEventListener('mousemove', (e) => {
   if (hit !== interactive) {
     interactive = hit;
     api.setInteractive(hit);
+    api.debugLog('hover', { hit, x: Math.round(e.clientX), y: Math.round(e.clientY) });
     document.body.classList.toggle('interactive', hit);
   }
 });
@@ -324,6 +325,12 @@ window.addEventListener('mousemove', (e) => {
 stage.addEventListener('mousedown', (e) => {
   if (e.button !== 0) return;
   const petEl = e.target instanceof Element ? e.target.closest('.pet') : null;
+  api.debugLog('down', {
+    x: Math.round(e.clientX),
+    y: Math.round(e.clientY),
+    target: (e.target && (e.target.className || e.target.tagName)) || '?',
+    hit: !!petEl
+  });
   if (!petEl) return;
   const id = petEl.dataset.id;
   const pet = pets.get(id);
@@ -353,6 +360,7 @@ stage.addEventListener('mousedown', (e) => {
   api.setInteractive(true);
   api.setDragging(true);
   api.grabPet(id);
+  api.debugLog('drag-start', { id });
 });
 
 window.addEventListener('mousemove', (e) => {
@@ -366,6 +374,7 @@ window.addEventListener('mousemove', (e) => {
 });
 
 window.addEventListener('mouseup', () => {
+  api.debugLog('up', { dragging: !!dragging });
   if (!dragging) return;
   const id = dragging.id;
   const pet = dragging.pet;
@@ -377,6 +386,13 @@ window.addEventListener('mouseup', () => {
   dragging = null;
   document.body.classList.remove('dragging');
   api.setDragging(false);
+});
+
+window.addEventListener('error', (ev) => {
+  api.debugLog('error', { message: ev.message, source: ev.filename, line: ev.lineno });
+});
+window.addEventListener('unhandledrejection', (ev) => {
+  api.debugLog('rejection', { reason: String(ev.reason && (ev.reason.stack || ev.reason.message || ev.reason)) });
 });
 
 window.addEventListener('resize', () => {
