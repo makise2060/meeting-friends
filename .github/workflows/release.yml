@@ -15,8 +15,25 @@ concurrency:
 
 jobs:
   build:
-    runs-on: windows-latest
-    timeout-minutes: 30
+    name: Build (${{ matrix.platform }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform: win
+            build: npm run dist
+            cache: |
+              ~/AppData/Local/electron/Cache
+              ~/AppData/Local/electron-builder/Cache
+          - os: ubuntu-latest
+            platform: linux
+            build: npm run dist:linux
+            cache: |
+              ~/.cache/electron
+              ~/.cache/electron-builder
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
     env:
       CSC_IDENTITY_AUTO_DISCOVERY: 'false'
     steps:
@@ -32,9 +49,7 @@ jobs:
       - name: Cache Electron binaries
         uses: actions/cache@v4
         with:
-          path: |
-            ~/AppData/Local/electron/Cache
-            ~/AppData/Local/electron-builder/Cache
+          path: ${{ matrix.cache }}
           key: ${{ runner.os }}-electron-${{ hashFiles('package-lock.json') }}
           restore-keys: |
             ${{ runner.os }}-electron-
@@ -53,67 +68,118 @@ jobs:
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
 
-      - name: Build portable exe
-        run: npm run dist
+      - name: Install Linux packaging tools
+        if: matrix.platform == 'linux'
+        run: sudo apt-get update && sudo apt-get install -y fakeroot
+
+      - name: Build
+        run: ${{ matrix.build }}
 
       - name: Verify artifact
         id: meta
         shell: bash
         run: |
           version="$(node -p "require('./package.json').version")"
-          exe="dist/friends-meet-$version-win-x64-portable.exe"
-          test -f "$exe" || { echo "::error::missing $exe"; exit 1; }
-          sha="$(sha256sum "$exe" | cut -d' ' -f1)"
-          printf '%s  %s\n' "$sha" "friends-meet-$version-win-x64-portable.exe" > "$exe.sha256"
+          if [ "${{ matrix.platform }}" = "linux" ]; then
+            file="dist/friends-meet-$version-linux-amd64.deb"
+          else
+            file="dist/friends-meet-$version-win-x64-portable.exe"
+          fi
+          test -f "$file" || { echo "::error::missing $file"; exit 1; }
+          sha="$(sha256sum "$file" | cut -d' ' -f1)"
+          printf '%s  %s\n' "$sha" "$(basename "$file")" > "$file.sha256"
           echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "exe=$exe" >> "$GITHUB_OUTPUT"
-          echo "sha256_file=$exe.sha256" >> "$GITHUB_OUTPUT"
+          echo "file=$(basename "$file")" >> "$GITHUB_OUTPUT"
+          echo "sha256=$sha" >> "$GITHUB_OUTPUT"
 
-      - name: Prepare release notes
-        if: startsWith(github.ref, 'refs/tags/v')
+      - name: Validate deb package
+        if: matrix.platform == 'linux'
         shell: bash
         run: |
-          version="${{ steps.meta.outputs.version }}"
-          exe_name="friends-meet-$version-win-x64-portable.exe"
-          sha="$(cut -d' ' -f1 "${{ steps.meta.outputs.sha256_file }}")"
-          node tools/release-notes.js "$version" --notes-out dist/release-notes.md --title-out dist/release-title.txt
-          {
-            echo ""
-            echo "---"
-            echo ""
-            echo "### 安装与校验"
-            echo ""
-            echo "- 下载：\`$exe_name\`"
-            echo "- SHA-256：\`$sha\`"
-            echo "- 平台：Windows x64，便携版，无需安装"
-            echo "- 未签名：首次运行需在 SmartScreen 选择「更多信息 → 仍要运行」"
-            echo "- 更新日志：https://github.com/${GITHUB_REPOSITORY}/blob/main/CHANGELOG.md"
-          } >> dist/release-notes.md
+          deb="dist/${{ steps.meta.outputs.file }}"
+          echo "--- control ---"
+          dpkg-deb -f "$deb" Package Version Architecture Maintainer Homepage Depends Recommends Section Priority
+          echo "--- contents ---"
+          dpkg-deb -c "$deb" | grep -E 'opt/.*/friends-meet$|applications/friends-meet\.desktop|icons/.*/friends-meet\.png' || {
+            echo "::error::deb missing expected files";
+            exit 1;
+          }
+          echo "--- install ---"
+          sudo apt-get install -y "./$deb"
+          dpkg -s friends-meet | grep -E '^(Package|Status|Version|Architecture):'
+          dpkg -L friends-meet | grep -E '/opt/.*/friends-meet$|applications/friends-meet\.desktop|icons/.*/friends-meet\.png'
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: friends-meet-${{ steps.meta.outputs.version }}-win-x64
+          name: friends-meet-${{ steps.meta.outputs.version }}-${{ matrix.platform }}
           path: |
-            ${{ steps.meta.outputs.exe }}
-            ${{ steps.meta.outputs.sha256_file }}
+            dist/${{ steps.meta.outputs.file }}
+            dist/${{ steps.meta.outputs.file }}.sha256
           if-no-files-found: error
           retention-days: 14
 
-      - name: Publish release
-        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+  release:
+    name: Draft release
+    needs: build
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Create draft release
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
         run: |
-          exe="${{ steps.meta.outputs.exe }}"
-          sha="${{ steps.meta.outputs.sha256_file }}"
-          title="$(cat dist/release-title.txt)"
-          notes="dist/release-notes.md"
-          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            gh release edit "$GITHUB_REF_NAME" --title "$title" --notes-file "$notes"
-            gh release upload "$GITHUB_REF_NAME" "$exe" "$sha" --clobber
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          win="$(find release-assets -maxdepth 1 -type f -name 'friends-meet-*-win-x64-portable.exe' | head -1)"
+          deb="$(find release-assets -maxdepth 1 -type f -name 'friends-meet-*-linux-amd64.deb' | head -1)"
+          test -n "$win" || { echo "::error::missing Windows exe"; exit 1; }
+          test -n "$deb" || { echo "::error::missing Linux deb"; exit 1; }
+          (cd release-assets && sha256sum -c "$(basename "$win").sha256")
+          (cd release-assets && sha256sum -c "$(basename "$deb").sha256")
+          win_sha="$(sha256sum "$win" | cut -d' ' -f1)"
+          deb_sha="$(sha256sum "$deb" | cut -d' ' -f1)"
+          node tools/release-notes.js "$version" \
+            --notes-out release-notes.md \
+            --title-out release-title.txt \
+            --repo "$GITHUB_REPOSITORY" \
+            --tag "$GITHUB_REF_NAME" \
+            --win-name "$(basename "$win")" \
+            --win-sha "$win_sha" \
+            --linux-name "$(basename "$deb")" \
+            --linux-sha "$deb_sha"
+          title="$(cat release-title.txt)"
+          assets=("$win" "$win.sha256" "$deb" "$deb.sha256")
+          is_draft="$(gh release list --limit 100 --json tagName,isDraft --jq ".[] | select(.tagName == \"$GITHUB_REF_NAME\") | .isDraft" | head -1)"
+          if [ -n "$is_draft" ]; then
+            if [ "$is_draft" != "true" ]; then
+              echo "::error::release $GITHUB_REF_NAME 已发布，禁止自动修改；请发 patch 版本"
+              exit 1
+            fi
+            gh release edit "$GITHUB_REF_NAME" --title "$title" --notes-file release-notes.md
+            gh release upload "$GITHUB_REF_NAME" "${assets[@]}" --clobber
           else
-            gh release create "$GITHUB_REF_NAME" "$exe" "$sha" --title "$title" --notes-file "$notes"
+            gh release create "$GITHUB_REF_NAME" \
+              --draft --verify-tag \
+              --title "$title" \
+              --notes-file release-notes.md \
+              "${assets[@]}"
           fi
+          echo "Draft release: https://github.com/$GITHUB_REPOSITORY/releases/tag/$GITHUB_REF_NAME"
