@@ -2,6 +2,7 @@
 
 const Sprites = window.Sprites;
 const Emotes = window.Emotes;
+const Physics = window.Physics;
 const stage = document.getElementById('stage');
 
 const SIZE = 96;
@@ -11,15 +12,22 @@ const HIT_PAD = 6;
 const TOP_PAD = 64;
 const EMOTE_MAX = 3;
 const EMOTE_TTL = 5000;
+const FOLLOW_TAU = 0.08;
 
 let state = { mode: 'idle', selfId: null, players: [] };
 const pets = new Map();
 const bubbleTimers = new Map();
 const talkTimers = new Map();
+const bumpTimers = new Map();
 
 let dragging = null;
 let interactive = false;
 let lastSent = 0;
+let lastBumpAt = 0;
+let dragCursor = { x: 0, y: 0 };
+let dragRaf = 0;
+let dragLast = 0;
+let cursorHistory = [];
 
 const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
 
@@ -51,7 +59,18 @@ function createPet(p) {
   el.append(wrap, nameEl, stack);
   stage.appendChild(el);
 
-  const pet = { id: p.id, el, nameEl, bubbleEl, emoteRow, emotes: [], x: p.x, y: p.y };
+  const pet = {
+    id: p.id,
+    el,
+    nameEl,
+    bubbleEl,
+    emoteRow,
+    emotes: [],
+    x: p.x,
+    y: p.y,
+    held: Boolean(p.held),
+    placed: false
+  };
   pets.set(p.id, pet);
   return pet;
 }
@@ -75,8 +94,10 @@ function clearEmotes(pet) {
 function destroyPet(pet) {
   clearTimeout(bubbleTimers.get(pet.id));
   clearTimeout(talkTimers.get(pet.id));
+  clearTimeout(bumpTimers.get(pet.id));
   bubbleTimers.delete(pet.id);
   talkTimers.delete(pet.id);
+  bumpTimers.delete(pet.id);
   clearEmotes(pet);
   pet.el.remove();
 }
@@ -111,13 +132,14 @@ function place(el, x, y, animate) {
   const H = window.innerHeight;
   const left = clamp(x * W - HALF, 0, W - SIZE);
   const top = clamp(y * H - HALF, TOP_PAD, H - SIZE - NAME_SPACE);
-  el.style.transition = animate ? 'left .12s linear, top .12s linear' : 'none';
+  el.style.transition = animate ? 'left .07s linear, top .07s linear' : 'none';
   el.style.left = left + 'px';
   el.style.top = top + 'px';
 }
 
 function sync() {
   if (state.mode === 'idle') {
+    if (dragging) resetInteraction();
     for (const pet of pets.values()) destroyPet(pet);
     pets.clear();
     return;
@@ -128,12 +150,18 @@ function sync() {
     let pet = pets.get(p.id);
     if (!pet) pet = createPet(p);
     const isSelf = p.id === state.selfId;
+    const isDragging = Boolean(dragging && dragging.id === p.id);
     pet.el.classList.toggle('self', isSelf);
     pet.nameEl.textContent = p.name;
-    pet.x = p.x;
-    pet.y = p.y;
-    if (!dragging || dragging.id !== p.id) {
-      place(pet.el, p.x, p.y, !isSelf);
+    pet.held = Boolean(p.held);
+    if (!isDragging) {
+      const changed = !pet.placed || Math.abs(pet.x - p.x) > 0.001 || Math.abs(pet.y - p.y) > 0.001;
+      pet.x = p.x;
+      pet.y = p.y;
+      if (changed) {
+        place(pet.el, p.x, p.y, false);
+        pet.placed = true;
+      }
     }
   }
   for (const [id, pet] of [...pets]) {
@@ -142,15 +170,49 @@ function sync() {
       pets.delete(id);
     }
   }
+  if (dragging && !pets.has(dragging.id)) resetInteraction();
 }
 
 function onMove(msg) {
   const pet = pets.get(msg.id);
   if (!pet) return;
+  if (dragging && dragging.id === msg.id) return;
   pet.x = msg.x;
   pet.y = msg.y;
-  if (dragging && dragging.id === msg.id) return;
-  place(pet.el, msg.x, msg.y, msg.id !== state.selfId);
+  pet.placed = true;
+  place(pet.el, msg.x, msg.y, true);
+}
+
+function onPositions(msg) {
+  if (!msg || !Array.isArray(msg.list)) return;
+  for (const item of msg.list) {
+    const pet = pets.get(item.id);
+    if (!pet) continue;
+    if (dragging && dragging.id === item.id) continue;
+    const dx = Math.abs(pet.x - item.x);
+    const dy = Math.abs(pet.y - item.y);
+    pet.x = item.x;
+    pet.y = item.y;
+    if (!pet.placed || dx > 0.0004 || dy > 0.0004) {
+      place(pet.el, item.x, item.y, true);
+      pet.placed = true;
+    }
+  }
+}
+
+function bumpPets(a, b) {
+  const now = performance.now();
+  if (now - lastBumpAt < 120) return;
+  lastBumpAt = now;
+  for (const id of [a, b]) {
+    const pet = pets.get(id);
+    if (!pet) continue;
+    clearTimeout(bumpTimers.get(id));
+    pet.el.classList.remove('bump');
+    void pet.el.offsetWidth;
+    pet.el.classList.add('bump');
+    bumpTimers.set(id, setTimeout(() => pet.el.classList.remove('bump'), 320));
+  }
 }
 
 function onChat(msg) {
@@ -181,8 +243,64 @@ function hitTest(x, y) {
   return null;
 }
 
+// 甩出方向取鼠标真实轨迹，而不是宠物的跟随轨迹，避免角度被延迟和碰撞带偏。
+function releaseVelocity() {
+  return Physics.estimate(cursorHistory, performance.now(), false);
+}
+
+// 拖拽时宠物不直接吸在鼠标上，而是带阻尼地跟过去；松手时把当前跟随速度交给房主。
+function stepDrag(now) {
+  if (!dragging) return;
+  const pet = dragging.pet;
+  const dt = Math.min(0.05, Math.max(0.001, (now - dragLast) / 1000));
+  dragLast = now;
+
+  const alpha = 1 - Math.exp(-dt / FOLLOW_TAU);
+  const wantX = pet.x + (dragCursor.x - pet.x) * alpha;
+  const wantY = pet.y + (dragCursor.y - pet.y) * alpha;
+
+  const bodies = [];
+  for (const p of pets.values()) {
+    bodies.push({ id: p.id, x: p.x, y: p.y, held: p.held });
+  }
+  const res = Physics.moveHeld(
+    { id: dragging.id, speed: 0, x: pet.x, y: pet.y },
+    bodies,
+    wantX,
+    wantY,
+    false
+  );
+
+  pet.x = res.x;
+  pet.y = res.y;
+  pet.placed = true;
+
+  const W = window.innerWidth;
+  const H = window.innerHeight;
+  const cx = clamp(res.x * W, HALF, W - HALF);
+  const cy = clamp(res.y * H, HALF + TOP_PAD, H - HALF);
+  pet.el.style.transition = 'none';
+  pet.el.style.left = (cx - HALF) + 'px';
+  pet.el.style.top = (cy - HALF) + 'px';
+
+  if (res.blockedBy) bumpPets(dragging.id, res.blockedBy);
+
+  if (now - lastSent > 60) {
+    lastSent = now;
+    api.movePet(dragging.id, res.x, res.y);
+  }
+
+  dragRaf = requestAnimationFrame(stepDrag);
+}
+
 function resetInteraction() {
+  if (dragging) {
+    cancelAnimationFrame(dragRaf);
+    dragRaf = 0;
+    api.releasePet(dragging.id, dragging.pet.x, dragging.pet.y, 0, 0);
+  }
   dragging = null;
+  cursorHistory = [];
   document.body.classList.remove('dragging');
   api.setDragging(false);
   for (const pet of pets.values()) clearEmotes(pet);
@@ -219,36 +337,43 @@ stage.addEventListener('mousedown', (e) => {
     offX: e.clientX - (rect.left + HALF),
     offY: e.clientY - (rect.top + HALF)
   };
+  const W = window.innerWidth;
+  const H = window.innerHeight;
+  dragCursor = {
+    x: clamp(e.clientX - dragging.offX, HALF, W - HALF) / W,
+    y: clamp(e.clientY - dragging.offY, HALF + TOP_PAD, H - HALF) / H
+  };
+  dragLast = performance.now();
+  cursorHistory = [{ t: dragLast, x: e.clientX / W, y: e.clientY / H }];
+  lastSent = 0;
+  dragRaf = requestAnimationFrame(stepDrag);
+
   document.body.classList.add('dragging');
   interactive = true;
   api.setInteractive(true);
   api.setDragging(true);
+  api.grabPet(id);
 });
 
 window.addEventListener('mousemove', (e) => {
   if (!dragging) return;
   const W = window.innerWidth;
   const H = window.innerHeight;
-  const cx = clamp(e.clientX - dragging.offX, HALF, W - HALF);
-  const cy = clamp(e.clientY - dragging.offY, HALF + TOP_PAD, H - HALF);
-  dragging.pet.el.style.transition = 'none';
-  dragging.pet.el.style.left = (cx - HALF) + 'px';
-  dragging.pet.el.style.top = (cy - HALF) + 'px';
-  const now = performance.now();
-  if (now - lastSent > 60) {
-    lastSent = now;
-    api.movePet(dragging.id, cx / W, cy / H);
-  }
+  dragCursor.x = clamp(e.clientX - dragging.offX, HALF, W - HALF) / W;
+  dragCursor.y = clamp(e.clientY - dragging.offY, HALF + TOP_PAD, H - HALF) / H;
+  cursorHistory.push({ t: performance.now(), x: e.clientX / W, y: e.clientY / H });
+  while (cursorHistory.length > 64) cursorHistory.shift();
 });
 
 window.addEventListener('mouseup', () => {
   if (!dragging) return;
+  const id = dragging.id;
   const pet = dragging.pet;
-  const W = window.innerWidth;
-  const H = window.innerHeight;
-  const cx = clamp(parseFloat(pet.el.style.left) + HALF, HALF, W - HALF);
-  const cy = clamp(parseFloat(pet.el.style.top) + HALF, HALF + TOP_PAD, H - HALF);
-  api.movePet(dragging.id, cx / W, cy / H);
+  const vel = releaseVelocity();
+  cancelAnimationFrame(dragRaf);
+  dragRaf = 0;
+  cursorHistory = [];
+  api.releasePet(id, pet.x, pet.y, vel.vx, vel.vy);
   dragging = null;
   document.body.classList.remove('dragging');
   api.setDragging(false);
@@ -265,6 +390,8 @@ api.onState((s) => {
   sync();
 });
 api.onMove(onMove);
+api.onPositions(onPositions);
+api.onBump((msg) => bumpPets(msg.a, msg.b));
 api.onChat(onChat);
 api.onEmote(onEmote);
 api.onRelayout(() => {

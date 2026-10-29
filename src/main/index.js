@@ -146,7 +146,14 @@ function buildState() {
   return {
     mode: roomMode,
     selfId: room.selfId,
-    players: room.players.map((p) => ({ id: p.id, name: p.name, avatar: p.avatar, x: p.x, y: p.y })),
+    players: room.players.map((p) => ({
+      id: p.id,
+      name: p.name,
+      avatar: p.avatar,
+      x: p.x,
+      y: p.y,
+      held: Boolean(p.holder)
+    })),
     room: room.info(),
     capacity: MAX_PLAYERS
   };
@@ -172,6 +179,8 @@ function wireRoom(r) {
     chatWin?.webContents.send('chat', msg);
   });
   r.on('move', (msg) => overlayWin?.webContents.send('move', msg));
+  r.on('positions', (msg) => overlayWin?.webContents.send('positions', msg));
+  r.on('bump', (msg) => overlayWin?.webContents.send('bump', msg));
   r.on('emote', (msg) => overlayWin?.webContents.send('emote', msg));
   r.on('reconnecting', (n) => toast(`与房主断开，正在重连（${n}/3）…`));
   r.on('reconnected', () => toast('已重新连上'));
@@ -458,6 +467,21 @@ function registerIpc() {
 
   ipcMain.handle('pet:move', (_e, pos) => {
     room?.move(pos?.x, pos?.y, pos?.id);
+    return true;
+  });
+
+  ipcMain.handle('pet:grab', (_e, id) => {
+    if (typeof id === 'string') room?.grab(id);
+    return true;
+  });
+
+  ipcMain.handle('pet:release', (_e, payload) => {
+    const id = payload && typeof payload.id === 'string' ? payload.id : null;
+    if (!id) return true;
+    if (Number.isFinite(payload.x) && Number.isFinite(payload.y)) {
+      room?.move(payload.x, payload.y, id);
+    }
+    room?.release(id, payload.vx, payload.vy);
     return true;
   });
 

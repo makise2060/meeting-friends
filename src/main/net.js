@@ -6,6 +6,7 @@ const os = require('node:os');
 const { WebSocketServer, WebSocket } = require('ws');
 const Sprites = require('../shared/sprites');
 const Emotes = require('../shared/emotes');
+const Physics = require('../shared/physics');
 
 const BASE_PORT = 47800;
 const PORT_TRIES = 20;
@@ -74,14 +75,30 @@ class HostRoom extends EventEmitter {
     super();
     this.code = sanitizeCode(code) || '0000';
     this.selfId = 'p' + crypto.randomBytes(3).toString('hex');
-    this.selfPlayer = { id: this.selfId, name: sanitizeName(name) || '房主', avatar: sanitizeAvatar(avatar), x: 0.5, y: DEFAULT_Y };
+    this.selfPlayer = {
+      id: this.selfId,
+      name: sanitizeName(name) || '房主',
+      avatar: sanitizeAvatar(avatar),
+      x: 0.5,
+      y: DEFAULT_Y,
+      vx: 0,
+      vy: 0,
+      holder: null,
+      heldUntil: 0
+    };
     this.players = [this.selfPlayer];
     this.roomName = `${this.selfPlayer.name} 的房间`;
     this.clients = new Map();
+    this.samples = new Map([[this.selfId, []]]);
     this.port = null;
     this.wss = null;
     this.stopped = false;
     this.heartbeat = null;
+    this.tickTimer = null;
+    this.lastTick = 0;
+    this.lastBroadcast = 0;
+    this.pending = new Set();
+    this.lastBump = new Map();
   }
 
   async start() {
@@ -209,8 +226,19 @@ class HostRoom extends EventEmitter {
         }
         const id = 'p' + crypto.randomBytes(3).toString('hex');
         const name = sanitizeName(msg.name) || '匿名';
-        player = { id, name, avatar: sanitizeAvatar(msg.avatar), x: this._defaultX(), y: DEFAULT_Y };
+        player = {
+          id,
+          name,
+          avatar: sanitizeAvatar(msg.avatar),
+          x: this._defaultX(),
+          y: DEFAULT_Y,
+          vx: 0,
+          vy: 0,
+          holder: null,
+          heldUntil: 0
+        };
         this.players.push(player);
+        this.samples.set(id, []);
         this.clients.set(id, { ws, times: [], emoteTimes: [] });
         joined = true;
         this._send(ws, {
@@ -237,16 +265,12 @@ class HostRoom extends EventEmitter {
         const out = { t: 'emote', id: player.id, emote: msg.emote, ts: Date.now() };
         this._broadcast(out);
         this.emit('emote', out);
+      } else if (msg.t === 'grab') {
+        if (typeof msg.id === 'string') this.grab(msg.id, player.id);
+      } else if (msg.t === 'release') {
+        if (typeof msg.id === 'string') this.release(msg.id, msg.vx, msg.vy, player.id);
       } else if (msg.t === 'move') {
-        const x = clamp01(msg.x);
-        const y = clamp01(msg.y);
-        if (x === null || y === null) return;
-        const target = typeof msg.id === 'string' ? this.players.find((p) => p.id === msg.id) : player;
-        if (!target) return;
-        target.x = x;
-        target.y = y;
-        this._broadcast({ t: 'move', id: target.id, x, y });
-        this.emit('move', { id: target.id, x, y });
+        this.move(msg.x, msg.y, typeof msg.id === 'string' ? msg.id : undefined, player.id);
       }
     });
 
@@ -254,6 +278,8 @@ class HostRoom extends EventEmitter {
       clearTimeout(joinTimer);
       if (!joined || !player) return;
       this.clients.delete(player.id);
+      this._releaseHolds(player.id);
+      this.samples.delete(player.id);
       this.players = this.players.filter((p) => p.id !== player.id);
       this._broadcast({ t: 'players', players: this.players });
       this.emit('state');
@@ -289,17 +315,217 @@ class HostRoom extends EventEmitter {
     this.emit('emote', out);
   }
 
-  move(x, y, targetId) {
+  grab(id, actorId = this.selfId) {
+    if (this.stopped) return false;
+    const player = this.players.find((p) => p.id === id);
+    if (!player) return false;
+    const changed = player.holder !== actorId;
+    player.holder = actorId;
+    player.heldUntil = Date.now() + Physics.GRAB_LEASE;
+    player.vx = 0;
+    player.vy = 0;
+    const samples = this.samples.get(id);
+    if (samples) samples.length = 0;
+    if (changed) this._syncPlayers();
+    this._ensureTick();
+    return true;
+  }
+
+  release(id, vx, vy, actorId = this.selfId) {
+    if (this.stopped) return false;
+    const player = this.players.find((p) => p.id === id);
+    if (!player || player.holder !== actorId) return false;
+    const samples = this.samples.get(id) || [];
+
+    let nvx = Number(vx);
+    let nvy = Number(vy);
+    if (!Number.isFinite(nvx) || !Number.isFinite(nvy)) {
+      const fallback = Physics.estimate(samples, Date.now());
+      nvx = fallback.vx;
+      nvy = fallback.vy;
+    }
+    const gain = Number(Physics.RELEASE_GAIN) || 1;
+    nvx *= gain;
+    nvy *= gain;
+    let speed = Math.hypot(nvx, nvy);
+    if (speed > Physics.MAX_SPEED) {
+      nvx = (nvx / speed) * Physics.MAX_SPEED;
+      nvy = (nvy / speed) * Physics.MAX_SPEED;
+      speed = Physics.MAX_SPEED;
+    }
+    if (speed < Physics.RELEASE_MIN) {
+      nvx = 0;
+      nvy = 0;
+    }
+
+    player.holder = null;
+    player.heldUntil = 0;
+    player.vx = nvx;
+    player.vy = nvy;
+    samples.length = 0;
+    if (Physics.speedOf(player) > Physics.MIN_SPEED) {
+      // 松手后第一帧就广播位移，避免等 50ms 的批量节流出现“卡一下”。
+      this.lastBroadcast = 0;
+      this.lastTick = Math.min(this.lastTick, Date.now() - 16);
+      this._ensureTick();
+    }
+    this._syncPlayers();
+    return true;
+  }
+
+  move(x, y, targetId, actorId = this.selfId) {
     if (this.stopped) return;
     const nx = clamp01(x);
     const ny = clamp01(y);
     if (nx === null || ny === null) return;
-    const target = targetId ? this.players.find((p) => p.id === targetId) : this.selfPlayer;
+    const target = targetId
+      ? this.players.find((p) => p.id === targetId)
+      : this.players.find((p) => p.id === actorId);
     if (!target) return;
-    target.x = nx;
-    target.y = ny;
-    this._broadcast({ t: 'move', id: target.id, x: nx, y: ny });
-    this.emit('move', { id: target.id, x: nx, y: ny });
+
+    const now = Date.now();
+    if (target.holder && target.holder !== actorId && target.heldUntil > now) return;
+    if (target.holder !== actorId) {
+      target.holder = actorId;
+      target.vx = 0;
+      target.vy = 0;
+      const existing = this.samples.get(target.id);
+      if (existing) existing.length = 0;
+      this._syncPlayers();
+    }
+    target.heldUntil = now + Physics.GRAB_LEASE;
+    this._ensureTick();
+
+    const samples = this.samples.get(target.id) || [];
+    this.samples.set(target.id, samples);
+    const velocity = Physics.estimate(samples, now);
+
+    const res = Physics.moveHeld(
+      { id: target.id, speed: Math.hypot(velocity.vx, velocity.vy), x: target.x, y: target.y },
+      this.players,
+      nx,
+      ny,
+      true
+    );
+    target.x = res.x;
+    target.y = res.y;
+
+    samples.push({ t: now, x: target.x, y: target.y });
+    while (samples.length > 8) samples.shift();
+
+    this._broadcast({ t: 'move', id: target.id, x: target.x, y: target.y });
+    this.emit('move', { id: target.id, x: target.x, y: target.y });
+
+    if (res.pushed.length) {
+      const list = [];
+      for (const id of res.pushed) {
+        const p = this.players.find((it) => it.id === id);
+        if (p) list.push({ id: p.id, x: p.x, y: p.y });
+      }
+      this._broadcastPositions(list);
+      this._ensureTick();
+    }
+    if (res.pushed.length || res.blockedBy) {
+      this._emitBump(
+        target.id,
+        res.pushed[0] || res.blockedBy,
+        Math.max(Physics.MIN_SPEED, Math.hypot(velocity.vx, velocity.vy))
+      );
+    }
+  }
+
+  _releaseHolds(actorId) {
+    let changed = false;
+    for (const player of this.players) {
+      if (player.holder === actorId) {
+        player.holder = null;
+        player.heldUntil = 0;
+        changed = true;
+      }
+    }
+    return changed;
+  }
+
+  _syncPlayers() {
+    this._broadcast({ t: 'players', players: this.players });
+    this.emit('state');
+  }
+
+  _broadcastPositions(list) {
+    if (!list || !list.length) return;
+    const msg = { t: 'positions', list };
+    this._broadcast(msg);
+    this.emit('positions', msg);
+  }
+
+  _flushPositions(now) {
+    if (!this.pending.size) return;
+    const list = [];
+    for (const id of this.pending) {
+      const player = this.players.find((p) => p.id === id);
+      if (player) list.push({ id: player.id, x: player.x, y: player.y });
+    }
+    this.pending.clear();
+    this.lastBroadcast = now || Date.now();
+    this._broadcastPositions(list);
+  }
+
+  _emitBump(a, b, power) {
+    if (!a || !b || a === b) return;
+    const key = a < b ? `${a}|${b}` : `${b}|${a}`;
+    const now = Date.now();
+    if ((this.lastBump.get(key) || 0) + Physics.BUMP_COOLDOWN > now) return;
+    this.lastBump.set(key, now);
+    const msg = { t: 'bump', a, b, power: Math.round(Number(power) || 0) };
+    this._broadcast(msg);
+    this.emit('bump', msg);
+  }
+
+  _ensureTick() {
+    if (this.stopped || this.tickTimer) return;
+    this.lastTick = Date.now();
+    this.lastBroadcast = 0;
+    this.tickTimer = setInterval(() => this._tick(), 16);
+    this.tickTimer.unref?.();
+  }
+
+  _stopTick() {
+    if (!this.tickTimer) return;
+    clearInterval(this.tickTimer);
+    this.tickTimer = null;
+  }
+
+  _tick() {
+    if (this.stopped) {
+      this._stopTick();
+      return;
+    }
+    const now = Date.now();
+    const dt = Math.min(0.05, Math.max(0, (now - this.lastTick) / 1000));
+    this.lastTick = now;
+
+    let holdChanged = false;
+    for (const player of this.players) {
+      if (player.holder && player.heldUntil && player.heldUntil <= now) {
+        player.holder = null;
+        player.heldUntil = 0;
+        holdChanged = true;
+      }
+    }
+    if (holdChanged) this._syncPlayers();
+
+    const res = Physics.step(this.players, dt);
+    for (const id of res.moved) this.pending.add(id);
+    for (const b of res.bumps) this._emitBump(b.a, b.b, b.power);
+
+    if (this.pending.size && now - this.lastBroadcast >= 50) this._flushPositions(now);
+
+    const moving = this.players.some((p) => !p.holder && Physics.speedOf(p) > Physics.MIN_SPEED);
+    const holding = this.players.some((p) => p.holder);
+    if (!moving && !holding) {
+      this._flushPositions(now);
+      this._stopTick();
+    }
   }
 
   kick(id) {
@@ -308,6 +534,8 @@ class HostRoom extends EventEmitter {
     this._send(c.ws, { t: 'kicked' });
     setTimeout(() => { try { c.ws.close(); } catch { /* ignore */ } }, 50);
     this.clients.delete(id);
+    this._releaseHolds(id);
+    this.samples.delete(id);
     this.players = this.players.filter((p) => p.id !== id);
     this._broadcast({ t: 'players', players: this.players });
     this.emit('state');
@@ -316,6 +544,10 @@ class HostRoom extends EventEmitter {
   stop() {
     if (this.stopped) return;
     this.stopped = true;
+    this._stopTick();
+    this.samples.clear();
+    this.pending.clear();
+    this.lastBump.clear();
     clearInterval(this.heartbeat);
     for (const c of this.clients.values()) {
       try {
@@ -441,6 +673,22 @@ class ClientRoom extends EventEmitter {
       const p = this.players.find((it) => it.id === msg.id);
       if (p) { p.x = x; p.y = y; }
       this.emit('move', { id: msg.id, x, y });
+    } else if (msg.t === 'positions') {
+      if (!Array.isArray(msg.list)) return;
+      const list = [];
+      for (const item of msg.list) {
+        if (!item || typeof item.id !== 'string') continue;
+        const x = clamp01(item.x);
+        const y = clamp01(item.y);
+        if (x === null || y === null) continue;
+        const p = this.players.find((it) => it.id === item.id);
+        if (p) { p.x = x; p.y = y; }
+        list.push({ id: item.id, x, y });
+      }
+      if (list.length) this.emit('positions', { list });
+    } else if (msg.t === 'bump') {
+      if (typeof msg.a !== 'string' || typeof msg.b !== 'string') return;
+      this.emit('bump', { a: msg.a, b: msg.b, power: Number(msg.power) || 0 });
     } else if (msg.t === 'kicked') {
       this.stopped = true;
       this.emit('closed', { reason: '你被房主移出了房间' });
@@ -495,6 +743,21 @@ class ClientRoom extends EventEmitter {
     if (nx === null || ny === null) return;
     const payload = { t: 'move', x: nx, y: ny };
     if (targetId) payload.id = targetId;
+    try { this.ws.send(JSON.stringify(payload)); } catch { /* ignore */ }
+  }
+
+  grab(id) {
+    if (this.stopped || !this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+    if (typeof id !== 'string') return;
+    try { this.ws.send(JSON.stringify({ t: 'grab', id })); } catch { /* ignore */ }
+  }
+
+  release(id, vx, vy) {
+    if (this.stopped || !this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+    if (typeof id !== 'string') return;
+    const payload = { t: 'release', id };
+    if (Number.isFinite(Number(vx))) payload.vx = Number(vx);
+    if (Number.isFinite(Number(vy))) payload.vy = Number(vy);
     try { this.ws.send(JSON.stringify(payload)); } catch { /* ignore */ }
   }
 
