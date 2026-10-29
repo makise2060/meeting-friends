@@ -278,6 +278,7 @@ function testTcp(ip, port) {
 
 function registerIpc() {
   ipcMain.handle('config:get', () => ({
+    version: app.getVersion(),
     name: config.name || '',
     avatar: config.avatar || 'dog',
     lastIp: config.lastIp || '',

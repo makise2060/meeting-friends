@@ -63,6 +63,14 @@ body {
   color: var(--muted);
 }
 
+.version {
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--muted);
+  opacity: .75;
+  letter-spacing: .5px;
+}
+
 .hero-pets {
   display: flex;
   gap: 2px;

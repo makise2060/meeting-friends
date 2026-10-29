@@ -304,6 +304,7 @@ async function init() {
   api.onToast(toast);
 
   const cfg = await api.getConfig();
+  $('appVersion').textContent = `v${cfg.version || 'dev'}`;
   $('name').value = cfg.name || '';
   $('ip').value = cfg.lastIp || '';
   $('port').value = String(cfg.lastPort || 47800);
